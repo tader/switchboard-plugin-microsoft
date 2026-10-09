@@ -1,0 +1,7 @@
+{
+  "plugins/onedrive": "1.0.0",
+  "plugins/microsoft": "1.0.0",
+  "plugins/outlook-calendar": "1.0.0",
+  "plugins/outlook-mail": "1.0.0",
+  "plugins/microsoft-todo": "1.0.0"
+}

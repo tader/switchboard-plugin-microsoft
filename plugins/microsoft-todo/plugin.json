@@ -1,0 +1,13 @@
+{
+  "id": "microsoft-todo",
+  "name": "Microsoft To Do",
+  "version": "1.0.0",
+  "description": "Task lists and tasks in Microsoft To Do.",
+  "dependencies": [
+    "microsoft"
+  ],
+  "icon": "icon.svg",
+  "dependencyVersions": {
+    "microsoft": "^1.0.0"
+  }
+}

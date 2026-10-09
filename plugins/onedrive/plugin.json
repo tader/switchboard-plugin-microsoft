@@ -1,0 +1,13 @@
+{
+  "id": "onedrive",
+  "name": "OneDrive",
+  "version": "1.0.0",
+  "description": "Files in OneDrive, for personal and work accounts.",
+  "dependencies": [
+    "microsoft"
+  ],
+  "icon": "icon.svg",
+  "dependencyVersions": {
+    "microsoft": "^1.0.0"
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "aae49b18f0012c9a63f3ce3ca1cfe04fa615345d",
+  "packages": {
+    "plugins/onedrive": {
+      "release-type": "node",
+      "component": "onedrive",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    },
+    "plugins/microsoft": {
+      "release-type": "node",
+      "component": "microsoft",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    },
+    "plugins/outlook-calendar": {
+      "release-type": "node",
+      "component": "outlook-calendar",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    },
+    "plugins/outlook-mail": {
+      "release-type": "node",
+      "component": "outlook-mail",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    },
+    "plugins/microsoft-todo": {
+      "release-type": "node",
+      "component": "microsoft-todo",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}
