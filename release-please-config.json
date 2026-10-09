@@ -12,7 +12,8 @@
           "path": "plugin.json",
           "jsonpath": "$.version"
         }
-      ]
+      ],
+      "initial-version": "1.0.0"
     },
     "plugins/microsoft": {
       "release-type": "node",
@@ -24,7 +25,8 @@
           "path": "plugin.json",
           "jsonpath": "$.version"
         }
-      ]
+      ],
+      "initial-version": "1.0.0"
     },
     "plugins/outlook-calendar": {
       "release-type": "node",
@@ -36,7 +38,8 @@
           "path": "plugin.json",
           "jsonpath": "$.version"
         }
-      ]
+      ],
+      "initial-version": "1.0.0"
     },
     "plugins/outlook-mail": {
       "release-type": "node",
@@ -48,7 +51,8 @@
           "path": "plugin.json",
           "jsonpath": "$.version"
         }
-      ]
+      ],
+      "initial-version": "1.0.0"
     },
     "plugins/microsoft-todo": {
       "release-type": "node",
@@ -60,7 +64,8 @@
           "path": "plugin.json",
           "jsonpath": "$.version"
         }
-      ]
+      ],
+      "initial-version": "1.0.0"
     }
   }
 }
