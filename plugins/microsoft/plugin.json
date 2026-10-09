@@ -1,0 +1,47 @@
+{
+  "id": "microsoft",
+  "name": "Microsoft",
+  "version": "1.0.0",
+  "description": "Microsoft sign-in for Microsoft Graph (Microsoft 365, Outlook.com, OneDrive). Other plugins build services such as Outlook Mail on top of it.",
+  "dependencies": [
+    "oauth2"
+  ],
+  "icon": "icon.svg",
+  "settings": [
+    {
+      "key": "clientId",
+      "label": "Application (client) ID",
+      "description": "From an app registration in the Microsoft Entra admin center. See the setup guide under Docs."
+    },
+    {
+      "key": "clientSecret",
+      "label": "Client secret",
+      "type": "secret",
+      "description": "For browser sign-in. Not needed for sign-in with a code."
+    },
+    {
+      "key": "tenant",
+      "label": "Accounts",
+      "type": "select",
+      "default": "common",
+      "options": [
+        {
+          "value": "common",
+          "label": "Work, school and personal Microsoft accounts"
+        },
+        {
+          "value": "organizations",
+          "label": "Work and school accounts only"
+        },
+        {
+          "value": "consumers",
+          "label": "Personal Microsoft accounts only"
+        }
+      ],
+      "description": "Must match the app registration's supported account types. For one organization only, enter its tenant ID under a connection's Advanced settings."
+    }
+  ],
+  "dependencyVersions": {
+    "oauth2": "^1.0.0"
+  }
+}
