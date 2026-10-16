@@ -1,7 +1,7 @@
 {
   "id": "teams-web",
   "name": "Teams",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "main": "index.js",
   "description": "Teams chats, channels and message actions through direct APIs using Microsoft Authentication, local sign-in or imported credentials.",
   "icon": "icon.svg",

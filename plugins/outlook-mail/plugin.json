@@ -1,7 +1,7 @@
 {
   "id": "outlook-mail",
   "name": "Outlook Mail",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Mail in Microsoft 365 and Outlook.com.",
   "dependencies": [
     "microsoft"
