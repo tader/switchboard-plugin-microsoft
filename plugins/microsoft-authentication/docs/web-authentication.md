@@ -10,7 +10,7 @@ Use your existing Microsoft web access without registering an application. This 
 
 ## Connect on your laptop
 
-1. Install **Microsoft Authentication** and the Microsoft product plugins you want.
+1. Install **Microsoft Authentication** (`plugins/microsoft-authentication`) on the computer used for sign-in, with Edge or Chrome available. Install the Microsoft product plugins you want. Update the shared **Microsoft** helper before adding Word, PowerPoint or Org Explorer to an existing installation.
 2. Add a **Microsoft Authentication** connection and choose **Sign in through local browser**. Complete sign-in in the dedicated Edge or Chrome window. The window closes when authentication finishes. `LOCAL-BROWSER` is a placeholder, not a Microsoft device code.
 3. Add Outlook Mail, Calendar, OneDrive, To Do, Excel, Teams, Word, PowerPoint, Org Explorer or Microsoft Graph. Choose **Use Microsoft Authentication**, select your authentication connection and choose its access level.
 
@@ -48,6 +48,8 @@ Web-app refresh tokens can reach Microsoft's 24-hour SPA lifetime limit; token r
 
 
 ## One sign-in including Teams
+
+Install Teams from `tader/switchboard-plugin-microsoft`, folder `plugins/teams`, instead of the standalone Teams repository. The plugin ID remains `teams-web`, preserving existing connection and plugin-data identities during migration.
 
 Microsoft Authentication now signs into Teams web by default. Live validation confirmed that this same Teams refresh credential can issue Graph, Outlook, Skype/Teams, chat aggregation and Substrate tokens. Select this source for every Microsoft service, including the consolidated `plugins/teams` plugin. Each service caches its required resource tokens and enforces its own request boundaries.
 
