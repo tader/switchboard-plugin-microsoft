@@ -3,5 +3,11 @@
   "plugins/microsoft": "1.1.0",
   "plugins/outlook-calendar": "1.1.0",
   "plugins/outlook-mail": "1.1.0",
-  "plugins/microsoft-todo": "1.1.0"
+  "plugins/microsoft-todo": "1.1.0",
+  "plugins/microsoft-authentication": "1.0.0",
+  "plugins/excel": "1.0.0",
+  "plugins/teams": "0.11.0",
+  "plugins/word": "1.0.0",
+  "plugins/powerpoint": "1.0.0",
+  "plugins/org-explorer": "1.0.0"
 }

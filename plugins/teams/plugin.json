@@ -1,0 +1,21 @@
+{
+  "id": "teams-web",
+  "name": "Teams",
+  "version": "0.11.0",
+  "main": "index.js",
+  "description": "Teams chats, channels and message actions through direct APIs using Microsoft Authentication, local sign-in or imported credentials.",
+  "icon": "icon.svg",
+  "settings": [
+    {
+      "key": "browserPath",
+      "label": "Chrome or Edge executable",
+      "description": "Optional. Chrome and Edge are detected automatically on macOS. Used only for authentication."
+    }
+  ],
+  "dependencies": [
+    "microsoft-authentication"
+  ],
+  "dependencyVersions": {
+    "microsoft-authentication": "^1.0.0"
+  }
+}

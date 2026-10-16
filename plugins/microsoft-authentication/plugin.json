@@ -1,0 +1,8 @@
+{
+  "id": "microsoft-authentication",
+  "name": "Microsoft Authentication",
+  "version": "1.0.0",
+  "description": "Microsoft web sign-in and cached API credentials for local connections and trusted peers.",
+  "icon": "icon.svg",
+  "settings": [{ "key": "browserPath", "label": "Authentication browser", "description": "Optional path to Edge or Chrome on the authentication device." }]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "powerpoint",
+  "name": "PowerPoint",
+  "version": "1.0.0",
+  "description": "Read and edit PowerPoint files in OneDrive and SharePoint using Microsoft Authentication.",
+  "dependencies": [
+    "microsoft",
+    "microsoft-authentication"
+  ],
+  "dependencyVersions": {
+    "microsoft": "^1.0.0",
+    "microsoft-authentication": "^1.0.0"
+  },
+  "icon": "icon.svg"
+}

@@ -1,0 +1,17 @@
+{
+  "description": "Synthetic, redacted contract examples; not a live capture. References: docs/triage-protocol.md.",
+  "boundary": 1791374400000,
+  "chats": [
+    {"id":"19:mention@thread.v2","title":"Mention chat","isRead":false,"isOneOnOne":false,"consumptionHorizon":{"originalArrivalTime":1791374400000}},
+    {"id":"19:direct@thread.v2","title":"Direct chat","isRead":false,"isOneOnOne":true,"userConsumptionHorizon":{"originalArrivalTime":1791374400000}},
+    {"id":"19:group@thread.v2","title":"Group chat","isRead":false,"consumptionHorizon":{"originalArrivalTime":1791374400000}}
+  ],
+  "teams": [{"displayName":"Test team","channels":[{"id":"19:channel@thread.tacv2","displayName":"Test channel","isMessageRead":false,"isMember":true,"consumptionHorizon":{"originalArrivalTime":1791374400000}}]}],
+  "messages": {
+    "19:mention@thread.v2": [{"id":"1791374402000","from":"8:orgid:peer","imdisplayname":"Peer & friend","content":"Please review <this>","messagetype":"Text","originalarrivaltime":1791374402000,"version":"1","clientmessageid":"101","properties":{"mentions":"[{\"mri\":\"8:orgid:self\"}]"}}],
+    "19:direct@thread.v2": [{"id":"1791374401000","from":"https://emea.ng.msg.teams.microsoft.com/v1/users/ME/contacts/8:orgid:peer","imdisplayname":"Peer","content":"A direct question","messagetype":"Text","originalarrivaltime":1791374401000,"version":"1","clientmessageid":"102"}],
+    "19:group@thread.v2": [{"id":"1791374400500","from":"8:orgid:peer","imdisplayname":"Peer","content":"A group question","messagetype":"Text","originalarrivaltime":1791374400500,"version":"1","clientmessageid":"103"}],
+    "19:channel@thread.tacv2": [{"id":"1791374403000","from":"8:orgid:peer","imdisplayname":"Peer","content":"Thread A","messagetype":"Text","originalarrivaltime":1791374403000,"version":"1","clientmessageid":"104"}],
+    "19:channel@thread.tacv2;messageid=1791374403000": [{"id":"1791374404000","parentMessageId":"1791374403000","from":"8:orgid:peer","imdisplayname":"Peer","content":"A reply in thread A","messagetype":"Text","originalarrivaltime":1791374404000,"version":"1","clientmessageid":"105"}]
+  }
+}

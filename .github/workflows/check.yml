@@ -13,3 +13,6 @@ jobs:
           package-manager-cache: false
       - run: npm ci
       - run: npm run check
+      - run: npm run build:content
+      - run: git diff --exit-code -- plugins/microsoft/vendor
+      - run: npm test

@@ -1,6 +1,8 @@
+import { createContentPlugin } from './content/service.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Field, PluginContext, ServiceDefinition } from './types/api.d.ts';
+import type { AuthenticationExports } from './types/authentication.d.ts';
 import type * as OAuth2 from './types/oauth2.d.ts';
 
 type Cfg = Record<string, any>;
@@ -23,6 +25,7 @@ const GRAPH = 'https://graph.microsoft.com/v1.0';
 const IDENTITY = ['offline_access', 'openid', 'profile', 'email', 'User.Read'];
 
 export default function setup(ctx: PluginContext) {
+  const authentication = ctx.require<AuthenticationExports>('microsoft-authentication');
   const oauth = ctx.require<typeof OAuth2>('oauth2');
   const shared = !!ctx.settings.clientId;
   const tenantOf = (c: Cfg) => String(c.tenant || ctx.settings.tenant || 'common').trim();
@@ -61,10 +64,11 @@ export default function setup(ctx: PluginContext) {
       description: o.description,
       icon: o.icon,
       docsUrl: o.docsUrl,
-      baseUrl: GRAPH,
-      allowedHosts: ['graph.microsoft.com'],
-      openapi: o.spec ? () => spec(o.spec!) : undefined,
+      baseUrl: (conn) => authentication.baseUrl(conn),
+      allowedHosts: (conn) => [authentication.backend(conn) === 'outlook' ? 'outlook.office.com' : 'graph.microsoft.com'],
+      openapi: o.spec ? (conn) => authentication.backend(conn) === 'outlook' ? authentication.outlookSpec(o.id) : spec(o.spec!) : undefined,
       authMethods: [
+        authentication.createConsumerAuth(ctx, o),
         oauth.authorizationCode({
           ...common,
           id: 'oauth',
@@ -108,5 +112,5 @@ export default function setup(ctx: PluginContext) {
     ],
   });
 
-  return { services: [graph], exports: { microsoftService, spec } };
+  return { services: [graph], exports: { microsoftService, spec, createContentPlugin } };
 }

@@ -1,0 +1,178 @@
+// Browser capture and HTTP renewal shared by production and the read-only diagnostic.
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { CDP, findBrowser } from './cdp.js';
+import { CLIENT_ID, ORIGINS, TEAMS_CLIENT_ID, TEAMS_ORIGINS, claims as tokenClaims } from './session.js';
+import { AdapterError } from './errors.js';
+
+export const fresh = (token, now = Date.now()) => typeof token?.value === 'string' && token.value.length > 0 && Number.isFinite(token.expiresAt) && token.expiresAt > now + 120_000;
+
+const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+const fail = (code, message) => new AdapterError(code, message, 503);
+function endpoint(raw) {
+  try {
+    const url = new URL(raw);
+    return url.origin === 'https://login.microsoftonline.com' && !url.username && !url.password && !url.hash &&
+      /^\/[a-z0-9._-]+\/oauth2\/(?:v2\.0\/)?token$/i.test(url.pathname) ? url : null;
+  } catch { return null; }
+}
+function origin(headers = {}) {
+  return Object.entries(headers).find(([key]) => key.toLowerCase() === 'origin')?.[1];
+}
+function identity(value) {
+  // Metadata from Microsoft's HTTPS token response. Microsoft validates the access
+  // tokens and confirms the account below; decoding a JWT is not signature validation.
+  const claims = tokenClaims(value.id_token || value.access_token || '');
+  if (!uuid.test(claims.tid ?? '') || !uuid.test(claims.oid ?? '')) throw fail('refresh_capture_identity', 'Microsoft returned no usable account metadata.');
+  return { tenant: claims.tid, oid: claims.oid, email: claims.preferred_username || claims.upn || claims.email || '', name: claims.name || '' };
+}
+
+async function tokenResponse(response) {
+  if (!response.body) return null;
+  const reader = response.body.getReader(), chunks = []; let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.length;
+      if (size > 512 * 1024) throw fail('refresh_response_invalid', 'Microsoft token response exceeded the size limit.');
+      chunks.push(value);
+    }
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error instanceof AdapterError ? error : fail('refresh_response_invalid', 'Could not read a valid Microsoft token response.');
+  } finally { reader.releaseLock(); }
+}
+
+export async function captureRefreshResponse(page, cdp, { signal, timeout = 300_000, app = 'outlook' } = {}) {
+  const clientId = app === 'teams' ? TEAMS_CLIENT_ID : CLIENT_ID;
+  const origins = app === 'teams' ? TEAMS_ORIGINS : ORIGINS;
+  await page.call('Network.enable', { maxTotalBufferSize: 2 * 1024 * 1024, maxResourceBufferSize: 512 * 1024 });
+  return new Promise((resolve, reject) => {
+    const requests = new Map(), extraHeaders = new Map(); let settled = false;
+    const sessions = new Map([[page.sessionId, page]]);
+    const observed = { microsoftRequests: 0, clientRequests: 0, successfulResponses: 0, targetFailures: 0 };
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true; clearTimeout(timer); unsubscribe(); signal?.removeEventListener('abort', abort);
+      requests.clear(); extraHeaders.clear(); sessions.clear();
+      if (error) reject(error); else resolve(value);
+    };
+    const abort = () => finish(fail('refresh_check_cancelled', 'Microsoft authentication cancelled.'));
+    const unsubscribe = cdp.subscribe(event => {
+      if (settled || !sessions.has(event.sessionId)) return;
+      const p = event.params;
+      if (event.method === 'Target.attachedToTarget') {
+        const child = { call: (method, args) => cdp.call(method, args, p.sessionId) };
+        sessions.set(p.sessionId, child);
+        (async () => {
+          await child.call('Network.enable', { maxTotalBufferSize: 2 * 1024 * 1024, maxResourceBufferSize: 512 * 1024 });
+          // Observe without pausing authentication: some workers cannot process
+          // debugger commands until the parent page's startup has finished.
+          if (p.targetInfo?.type === 'iframe') await child.call('Target.setAutoAttach', {
+            autoAttach: true, waitForDebuggerOnStart: false, flatten: true,
+          }).catch(() => {});
+        })().catch(() => { observed.targetFailures++; sessions.delete(p.sessionId); });
+        return;
+      }
+      if (event.method === 'Target.detachedFromTarget') { sessions.delete(p.sessionId); return; }
+      const target = sessions.get(event.sessionId), key = `${event.sessionId}:${p.requestId}`;
+      if (event.method === 'Network.requestWillBeSentExtraInfo') {
+        if (extraHeaders.size < 1000) extraHeaders.set(key, p.headers);
+        return;
+      }
+      if (event.method === 'Network.requestWillBeSent') {
+        // A redirect invalidates the earlier candidate, even if its request ID is reused.
+        requests.delete(key);
+        if (p.request.method !== 'POST' || !endpoint(p.request.url) || requests.size >= 100) return;
+        observed.microsoftRequests++;
+        const metadata = (async () => {
+          const postData = p.request.postData ?? (await target.call('Network.getRequestPostData', { requestId: p.requestId })).postData;
+          if (typeof postData !== 'string' || postData.length > 256 * 1024) return null;
+          const form = new URLSearchParams(postData);
+          if (form.getAll('client_id').length !== 1 || form.get('client_id') !== clientId || form.has('client_secret') || form.getAll('grant_type').length !== 1 ||
+              !['authorization_code', 'refresh_token'].includes(form.get('grant_type'))) return null;
+          observed.clientRequests++;
+          return { headers: p.request.headers, grantType: form.get('grant_type'), url: p.request.url };
+        })().catch(() => null);
+        requests.set(key, { metadata, accepted: false });
+      } else if (event.method === 'Network.responseReceived') {
+        const request = requests.get(key);
+        if (request) {
+          request.responseURL = p.response.url;
+          request.accepted = p.response.status === 200 && Boolean(endpoint(p.response.url)) &&
+            !p.response.fromDiskCache && !p.response.fromServiceWorker;
+        }
+      } else if (event.method === 'Network.loadingFailed') {
+        requests.delete(key); extraHeaders.delete(key);
+      } else if (event.method === 'Network.loadingFinished') {
+        const request = requests.get(key);
+        if (!request?.accepted) return;
+        // CDP handlers must never throw or leak response bodies through browser errors.
+        (async () => {
+          const metadata = await request.metadata;
+          if (settled || !metadata || metadata.url !== request.responseURL) return;
+          const requestOrigin = origin(extraHeaders.get(key)) || origin(metadata.headers);
+          if (!origins.includes(requestOrigin)) return;
+          observed.successfulResponses++;
+          const response = await target.call('Network.getResponseBody', { requestId: p.requestId });
+          if (settled || typeof response.body !== 'string' || response.body.length > 700_000) return;
+          const body = response.base64Encoded ? Buffer.from(response.body, 'base64').toString('utf8') : response.body;
+          if (Buffer.byteLength(body) > 512 * 1024) return;
+          const value = JSON.parse(body);
+          if (typeof value.refresh_token !== 'string' || !value.refresh_token || value.refresh_token.length > 100_000) return;
+          const account = identity(value);
+          finish(null, { refreshToken: value.refresh_token, clientId, origin: requestOrigin, identity: account,
+            capturedAt: Date.now(), sourceGrant: metadata.grantType });
+        })().catch(() => finish(fail('refresh_capture_failed', 'Could not read valid Microsoft renewal credentials from Microsoft.')));
+      }
+    });
+    const timer = setTimeout(async () => {
+      let location = 'unknown';
+      try {
+        const tree = await page.call('Page.getFrameTree');
+        const host = new URL(tree.frameTree.frame.url).hostname;
+        location = origins.some(value => new URL(value).hostname === host) ? 'outlook_app' : host === 'login.microsoftonline.com' ? 'microsoft_signin' : 'other_page';
+      } catch {}
+      finish(fail('refresh_capture_timeout', `No Microsoft refresh token was captured (page: ${location}; Microsoft requests: ${observed.microsoftRequests}; client requests: ${observed.clientRequests}; successful responses: ${observed.successfulResponses}; target failures: ${observed.targetFailures}). Complete sign-in in the authentication browser and retry.`));
+    }, timeout);
+    cdp.exit?.then(() => finish(fail('refresh_browser_closed', 'The authentication browser closed before refresh-token capture.')));
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) { abort(); return; }
+    page.call('Target.setAutoAttach', { autoAttach: true, waitForDebuggerOnStart: false, flatten: true })
+      .then(() => page.call('Page.navigate', { url: app === 'teams' ? 'https://teams.microsoft.com/v2/' : 'https://outlook.cloud.microsoft/' })).then(result => {
+      if (result.errorText) finish(fail('refresh_navigation_failed', 'Could not open Microsoft for authentication.'));
+    }, () => finish(fail('refresh_navigation_failed', 'Could not open Microsoft for authentication.')));
+  });
+}
+
+export async function acquireBrowserRefresh(directory, { silent = false, browserPath, signal, app = 'teams' } = {}, {
+  createCDP = (exe, dir, options) => new CDP(exe, dir, options), discoverBrowser = findBrowser,
+} = {}) {
+  signal?.throwIfAborted();
+  const profile = path.join(directory, 'auth-browser');
+  await fs.mkdir(profile, { recursive: true, mode: 0o700 }); await fs.chmod(profile, 0o700);
+  const cdp = createCDP(await discoverBrowser(browserPath), profile, { headless: silent });
+  const abort = () => { cdp.close().catch(() => {}); };
+  signal?.addEventListener('abort', abort, { once: true });
+  try {
+    signal?.throwIfAborted();
+    const page = await cdp.page('about:blank');
+    // Only this dedicated authentication profile is touched. Keep Microsoft login cookies,
+    // but clear Microsoft app caches so an existing AT cannot conceal the token exchange.
+    for (const appOrigin of app === 'teams' ? TEAMS_ORIGINS : ORIGINS) await page.call('Storage.clearDataForOrigin', {
+      origin: appOrigin, storageTypes: 'local_storage,indexeddb,cache_storage,service_workers',
+    });
+    return await captureRefreshResponse(page, cdp, { signal, app, timeout: silent ? 60_000 : 300_000 });
+  } finally {
+    signal?.removeEventListener('abort', abort);
+    await cdp.close();
+    // Acquisition must establish that the browser process has exited.
+    if (cdp.exit) {
+      let timer;
+      try { await Promise.race([cdp.exit, new Promise((_, reject) => { timer = setTimeout(() => reject(fail('refresh_browser_exit_failed', 'The authentication browser did not exit. Authentication could not finish.')), 5000); })]); }
+      finally { clearTimeout(timer); }
+    }
+  }
+}
