@@ -7,7 +7,7 @@ import { linkedText } from './linkify.js';
 
 export const unsupported = () => { throw new AdapterError('api_operation_unsupported', 'This operation has not been migrated to the Teams API. See getTeamsCapabilities.', 501); };
 export const capabilities = {
-  transport: 'api', browserUse: 'authentication_only', authModes: ['browser', 'tokens'],
+  transport: 'api', browserUse: 'authentication_only', authModes: ['microsoft', 'browser', 'tokens'],
   supported: ['status', 'chats', 'unread_chats', 'unread_messages', 'messages', 'chat_history', 'channels', 'channel_history', 'exact_email_lookup', 'people_search', 'message_search', 'open_search_result', 'new_conversation', 'mentions', 'quoted_replies', 'channel_thread_history', 'channel_root_listing', 'existing_one_to_one', 'send_chat', 'formatted_chat', 'edit_chat', 'delete_chat', 'chat_reactions', 'mutation_state_readback', 'chat_discovery_pagination', 'automatic_url_links', 'channel_thread_replies'],
   unsupported: ['mark_unread', 'send_channel_thread', 'attachments'],
   liveValidated: ['oauth_tokens', 'profile_read', 'conversation_list', 'recent_messages', 'people_search', 'message_search', 'open_search_result.chat', 'open_search_result.channel', 'exact_message_read', 'channel_root_listing', 'channel_thread_reads', 'channel_thread_history', 'channel_thread_history.deep_pagination', 'quoted_replies.send', 'mentions.server_metadata', 'mutation_state_readback.live_writes', 'chat_discovery_pagination', 'automatic_url_links.send_edit'],

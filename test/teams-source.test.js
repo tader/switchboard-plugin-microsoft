@@ -1,4 +1,10 @@
 import { test } from 'node:test';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { createAdapter } from '../plugins/teams/index.js';
+import { createConsumerAuth } from '../plugins/microsoft-authentication/consumer.ts';
 import assert from 'node:assert/strict';
 import { MicrosoftTeamsSession } from '../plugins/teams/lib/microsoft-session.js';
 import * as web from '../plugins/microsoft-authentication/lib/session.js';
@@ -22,9 +28,9 @@ function fixture() {
   };
   const webSession={...web,format:web.FORMAT,teamsClientId:web.TEAMS_CLIENT_ID,refresh:(b,o)=>web.refresh(b,{...o,fetcher}),identify:(b,o)=>web.identify(b,{...o,fetcher})};
   const ctx={require:()=>({webSession}),credentials:{obtain:async(ref,opts)=>{supplied.push({ref,...opts});return {format:web.FORMAT,bundle:bundle(),account:{id:`${tenant}:${oid}`,label:'fixture@example.test'}};}}};
-  const make=()=>new MicrosoftTeamsSession(ctx,'profile','/unused',{}, {fetcher,createAuthenticator:()=>{throw Error('Unexpected browser');}});
+  const make=(profile='profile',dir='/unused',settings={})=>new MicrosoftTeamsSession(ctx,profile,dir,settings, {fetcher,createAuthenticator:()=>{throw Error('Unexpected browser');}});
   const session=make();session.persistCredentials=async value=>saved.push(structuredClone(value));
-  return {session,make,supplied,saved,requests,rejectRefresh:()=>{rejectRefresh=true;},rejectChat:()=>{rejectChat=true;}};
+  return {ctx,session,make,supplied,saved,requests,rejectRefresh:()=>{rejectRefresh=true;},rejectChat:()=>{rejectChat=true;}};
 }
 test('Teams source renews the issuing client, persists rotations, and works from a cached bundle offline',async()=>{
  const f=fixture();const credentials=await f.session.connectSource({authenticationSource:'laptop'});
@@ -45,4 +51,52 @@ test('Teams and Outlook clients cannot exchange origins during import or renewal
  const b=bundle();assert.equal(web.validateBundle(b).clientId,web.TEAMS_CLIENT_ID);
  assert.throws(()=>web.validateBundle({...b,origin:'https://outlook.cloud.microsoft'}),{code:'invalid_credentials'});
  assert.throws(()=>web.validateBundle({...b,clientId:web.CLIENT_ID}),{code:'invalid_credentials'});
+});
+
+
+test('Teams offers the same shared authentication picker as other Microsoft products and migrates in place', async t => {
+  const f = fixture();
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'teams-source-adapter-'));
+  let directoryChecks = 0;
+  const adapter = await createAdapter({ ...f.ctx, dataDir: directory, settings: {} }, {
+    createSession: f.make,
+    createAPI: () => ({ directory: async () => { directoryChecks++; } }),
+  });
+  t.after(async () => { await adapter.dispose(); await fs.rm(directory, { recursive: true, force: true }); });
+  const methods = adapter.services[0].authMethods;
+  assert.deepEqual(methods.filter(method => !method.hidden).map(method => method.id), ['authentication-source']);
+  const method = methods[0];
+  const outlook = createConsumerAuth(f.ctx, { id: 'outlook-mail', scopes: [] });
+  assert.equal(method.name, outlook.name);
+  assert.deepEqual(method.fields, outlook.fields);
+  assert.deepEqual(method.credentialConsumer, outlook.credentialConsumer);
+  assert.equal(method.unavailable, undefined);
+  const profile = randomUUID();
+  const config = { authenticationSource: 'peer/laptop/microsoft-source' };
+  const connected = await method.connect({ config, connection: { credentials: { profile, authMode: 'browser' } } });
+  assert.equal(connected.credentials.profile, profile);
+  assert.equal(connected.credentials.authMode, 'microsoft');
+  assert.deepEqual(connected.config, config);
+  assert.equal(connected.account.id, `${tenant}:${oid}`);
+  assert.equal(f.supplied[0].ref, config.authenticationSource);
+  assert.equal(directoryChecks, 1);
+  const request = { method: 'GET', url: new URL('/status', adapter.services[0].baseUrl), headers: new Headers() };
+  await method.authorize(request, connected);
+  const response = await fetch(request.url, { headers: request.headers });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).authMode, 'microsoft');
+});
+
+test('Teams shows an upgrade message instead of silently omitting shared authentication on older cores', async t => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'teams-source-upgrade-'));
+  const adapter = await createAdapter({ dataDir: directory, settings: {} });
+  t.after(async () => { await adapter.dispose(); await fs.rm(directory, { recursive: true, force: true }); });
+  const methods = adapter.services[0].authMethods;
+  const visible = methods.filter(method => !method.hidden);
+  assert.equal(visible.length, 1);
+  assert.equal(visible[0].id, 'authentication-source');
+  assert.match(visible[0].unavailable, /Upgrade Switchboard/);
+  await assert.rejects(visible[0].connect({ config: {} }), { code: 'core_upgrade_required' });
+  assert(methods.find(method => method.id === 'browser').authorize);
+  assert(methods.find(method => method.id === 'tokens').authorize);
 });

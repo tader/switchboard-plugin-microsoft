@@ -80,7 +80,7 @@ async function fixture(t, { forbidBrowser = false, dataDir, peerMessages = false
     },
   });
   t.after(async () => { await instance.dispose(); await fs.rm(directory, { recursive: true, force: true }); });
-  const auth = instance.services[0].authMethods[0];
+  const auth = instance.services[0].authMethods.find(method => method.id === 'browser');
   async function connect() {
     const flow = await auth.connect({ config: { label: 'Test' } });
     await sessions.get(flow.pending.profile).loginTask;

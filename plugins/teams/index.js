@@ -249,14 +249,16 @@ export async function createAdapter(ctx, {
     },
   };
   return {
-    services: [{ id: 'teams-web', name: 'Teams', icon: 'icon.svg', description: 'Teams APIs with local browser sign-in or imported tokens.',
+    services: [{ id: 'teams-web', name: 'Teams', icon: 'icon.svg', description: 'Teams APIs using shared Microsoft Authentication.',
       baseUrl: 'http://teams.localhost', allowedHosts: ['teams.localhost', new URL(origin).host], openapi,
-      authMethods: [...(ctx.credentials ? [{
+      authMethods: [{
         id: 'authentication-source', name: 'Use Microsoft Authentication',
-        description: 'Use the same Microsoft sign-in as Outlook, OneDrive and Excel, locally or from a trusted peer.',
+        description: 'Use cached web credentials from this device or an explicitly shared authentication source on a peer.',
+        unavailable: ctx.credentials ? undefined : 'Upgrade Switchboard to enable authentication sources',
         fields: [{ key: 'authenticationSource', label: 'Authentication connection', type: 'credential-source', credentialFormat: 'microsoft/web-session/v1', required: true }],
         credentialConsumer: { format: 'microsoft/web-session/v1', field: 'authenticationSource' },
         async connect({ config, connection }) {
+          if (!ctx.credentials) throw new AdapterError('core_upgrade_required', 'Upgrade Switchboard to use authentication sources.', 503);
           const profile = connection?.credentials?.profile ?? randomUUID();
           const entry = entryFor(profile);
           try {
@@ -267,7 +269,7 @@ export async function createAdapter(ctx, {
           } catch (error) { await entry.session.close(); throw error; }
         },
         ...sharedAuth,
-      }] : []), { id: 'browser', name: 'Microsoft sign-in through local Chrome',
+      }, { hidden: true, id: 'browser', name: 'Microsoft sign-in through local Chrome',
         description: 'Sign in once in a dedicated local Chrome profile. Tokens are stored encrypted by Switchboard. Chrome closes after authentication; API calls renew tokens automatically when possible.',
         fields: [{ key: 'label', label: 'Account label', required: true }, { key: 'loginHint', label: 'Microsoft work email', description: 'Optional account hint for sign-in.' }],
         async connect({ config, connection }) {
@@ -298,7 +300,7 @@ export async function createAdapter(ctx, {
         },
         ...sharedAuth,
       }, {
-        id: 'tokens', name: 'Import Teams tokens',
+        hidden: true, id: 'tokens', name: 'Import Teams tokens',
         description: 'Paste a bundle from auth:export. Refresh-capable bundles renew automatically over HTTP. Re-import when Microsoft requires fresh authentication. No browser is used here.',
         fields: [{ key: 'label', label: 'Account label', required: true }, { key: 'tokenBundle', label: 'Teams token bundle (JSON)', type: 'secret', required: true }],
         async connect({ config, connection }) {
