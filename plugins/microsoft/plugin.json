@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Microsoft sign-in for Microsoft Graph (Microsoft 365, Outlook.com, OneDrive). Other plugins build services such as Outlook Mail on top of it.",
   "dependencies": [
-    "oauth2"
+    "oauth2",
+    "microsoft-authentication"
   ],
   "icon": "icon.svg",
   "settings": [
@@ -42,6 +43,7 @@
     }
   ],
   "dependencyVersions": {
-    "oauth2": "^1.0.0"
+    "oauth2": "^1.0.0",
+    "microsoft-authentication": "^1.0.0"
   }
 }

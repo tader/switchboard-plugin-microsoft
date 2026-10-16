@@ -1,0 +1,87 @@
+{
+  "evidence": "Native requests captured on 2026-10-08 in user-designated Notes and regular meeting chats. Browser-closed read-state checks passed in the regular chat. All numeric and regular-chat identifiers are synthetic; no credentials or message contents retained.",
+  "selectedMessageId": "1791448000000",
+  "unread": {
+    "method": "PUT",
+    "path": "/api/chatsvc/emea/v1/users/ME/conversations/48%3Anotes/properties?name=consumptionHorizonBookmark",
+    "body": {
+      "consumptionHorizonBookmark": "1791447999999;1791455000000;1234567890123456789"
+    },
+    "status": 200
+  },
+  "read": {
+    "method": "PUT",
+    "path": "/api/chatsvc/emea/v1/users/ME/conversations/48%3Anotes/properties?name=consumptionHorizonBookmark",
+    "body": {
+      "consumptionHorizonBookmark": "0;1791455001000;0"
+    },
+    "status": 200
+  },
+  "limitations": [
+    "No live message was sent; later-message preservation used existing messages.",
+    "New arrival and concurrent external marker behavior is fixture-tested; private endpoints offer no atomic compare-and-set.",
+    "Channel scope and automatic read-after-reply remain unverified and disabled."
+  ],
+  "readback": {
+    "transport": "Regional API GET after authentication browser exited",
+    "notesListed": false,
+    "properties": {
+      "consumptionhorizon": "1791448000000;1791448001000;1234567890123456789",
+      "consumptionHorizonBookmark": "0;1791455001000;0"
+    }
+  },
+  "regularChat": {
+    "threadId": "19:designated-test@thread.v2",
+    "selectedMessageId": "1791448000000",
+    "laterMessageId": "1791448005000",
+    "nativeUnread": {
+      "method": "PUT",
+      "name": "consumptionHorizonBookmark",
+      "body": {
+        "consumptionHorizonBookmark": "1791447999999;1791455000000;1234567890123456789"
+      },
+      "status": 200
+    },
+    "nativeClear": {
+      "method": "PUT",
+      "name": "consumptionHorizonBookmark",
+      "body": {
+        "consumptionHorizonBookmark": "0;1791455001000;0"
+      },
+      "status": 200
+    },
+    "browserClosedReadback": [
+      {
+        "operation": "unread",
+        "boundary": 1791447999999,
+        "isRead": false
+      },
+      {
+        "operation": "read prefix",
+        "boundary": 1791448000000,
+        "ordinaryBoundary": 1791448005000,
+        "isRead": false
+      },
+      {
+        "operation": "replay old unread key",
+        "replayed": true,
+        "currentBoundary": 1791448000000
+      },
+      {
+        "operation": "read through normal frontier",
+        "boundary": 1791448005000,
+        "bookmark": 0,
+        "isRead": true
+      }
+    ]
+  },
+  "ordinaryHorizon": {
+    "nativeMethod": "PUT",
+    "name": "consumptionhorizon",
+    "body": {
+      "consumptionhorizon": "1791448005000;1791455002000;1234567890123456790"
+    },
+    "nativeStatus": 200,
+    "regularChatSameBoundaryRegionalWriteAccepted": true
+  }
+}

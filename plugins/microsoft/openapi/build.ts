@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
+import { supportedPath } from './selection.ts';
 import { exampleJson, makeResolver } from './schema.ts';
 
 const SOURCE = 'https://raw.githubusercontent.com/microsoftgraph/msgraph-metadata/master/openapi/v1.0/openapi.yaml';
@@ -17,7 +18,8 @@ const SOURCE = 'https://raw.githubusercontent.com/microsoftgraph/msgraph-metadat
 export const SUBSETS: Record<string, { title: string; paths: RegExp[] }> = {
   mail: { title: 'Outlook Mail', paths: [/^\/me\/(messages|mailFolders|sendMail|inferenceClassification|outlook\/masterCategories|mailboxSettings)(\/|$)/] },
   calendar: { title: 'Outlook Calendar', paths: [/^\/me\/(calendar|calendars|calendarGroups|calendarView|events|findMeetingTimes)(\/|$)/] },
-  onedrive: { title: 'OneDrive', paths: [/^\/me\/drive(\/|$)/, /^\/me\/drive$/, /^\/drives\/\{drive-id\}\/items\/\{driveItem-id\}(\/children|\/content)?$/, /^\/shares(\/|$)/] },
+  onedrive: { title: 'OneDrive', paths: [/^\/me\/drive(\/|$)/, /^\/me\/drive$/, /^\/drives\/\{drive-id\}\/items\/\{driveItem-id\}(\/children|\/content)?$/, /^\/shares(\/|$)/, /^\/sites(\/|$)/, /^\/drives\/\{drive-id\}(\/|$)/] },
+  excel: { title: 'Excel', paths: [/^\/drives\/\{drive-id\}\/items\/\{driveItem-id\}\/workbook(\/|$)/, /^\/me\/drive\/items\/\{driveItem-id\}\/workbook(\/|$)/] },
   todo: { title: 'Microsoft To Do', paths: [/^\/me\/todo(\/|$)/] },
 };
 // The general Microsoft Graph service gets all of the above, plus profile, contacts and people.
@@ -65,8 +67,12 @@ const trim = (s: unknown, max: number) => (typeof s === 'string' && s.trim() ? (
  */
 function addDriveAliases(doc: any) {
   const ITEM = '/drives/{drive-id}/items/{driveItem-id}';
+  doc.paths['/sites/root'] = { get: { operationId: 'sites.root', summary: 'Get root SharePoint site', parameters: [] } };
+  doc.paths['/sites/{hostname}:/{site-path}'] = { get: { operationId: 'sites.byPath', summary: 'Get SharePoint site by URL path', parameters: ['hostname','site-path'].map(name => ({name,in:'path',required:true,schema:{type:'string'}})) } };
+
   const suffixes = ['', '/children', '/content', '/copy', '/createLink', '/createUploadSession', '/invite', '/permissions', '/preview', '/restore', '/thumbnails', '/versions', '/delta()', '/checkin', '/checkout'];
   const rootSuffixes = ['', '/children', '/content', '/delta()', '/createUploadSession'];
+  for (const [url, item] of Object.entries(doc.paths)) if (url.startsWith(ITEM + '/workbook')) doc.paths['/me/drive/items/{driveItem-id}' + url.slice(ITEM.length)] = item;
   for (const sfx of suffixes) {
     const item = doc.paths[ITEM + sfx];
     if (!item) continue;
@@ -95,7 +101,7 @@ function slim(doc: any, patterns: RegExp[]) {
   const resolve = makeResolver(doc);
   const paths: Record<string, any> = {};
   for (const [p, rawItem] of Object.entries<any>(doc.paths)) {
-    if (!patterns.some((re) => re.test(p))) continue;
+    if (!patterns.some((re) => re.test(p)) || !supportedPath(p)) continue;
     const item = resolve(rawItem) ?? {};
     const shared = (item.parameters ?? []).map(resolve);
     for (const m of METHODS) {
@@ -115,11 +121,12 @@ function slim(doc: any, patterns: RegExp[]) {
             schema: { type: schema.type ?? resolve(schema.items)?.type, enum: Array.isArray(schema.enum) ? schema.enum.slice(0, 30) : undefined, default: schema.default },
           };
         });
+      if (p.includes('/workbook')) params.push({ name: 'workbook-session-id', in: 'header', required: false, description: 'Optional persistent workbook session ID', schema: { type: 'string', enum: undefined, default: undefined } });
       let requestBody;
       const rb = resolve(op.requestBody);
       const json = rb?.content?.['application/json'];
       if (json) {
-        const curated = EXAMPLES[`${m.toUpperCase()} ${p}`];
+        const curated = EXAMPLES[`${m.toUpperCase()} ${p}`] ?? (p.endsWith('/workbook/createSession') ? { persistChanges: true } : m === 'patch' && /\/workbook\/worksheets\/[^/]+\/range\(/.test(p) ? { values: [[1, 2], [3, 4]], formulas: [[null, null], [null, '=SUM(A1:B1)']] } : undefined);
         const generated = curated ? undefined : exampleJson(json.schema, resolve);
         const example = curated ?? (generated ? clean(JSON.parse(generated)) : undefined);
         requestBody = { required: !!rb.required, content: { 'application/json': example !== undefined ? { example } : {} } };

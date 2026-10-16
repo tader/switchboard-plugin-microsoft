@@ -1,0 +1,15 @@
+{
+  "id": "org-explorer",
+  "name": "Org Explorer",
+  "version": "1.0.0",
+  "description": "Read organization profiles, managers, peers and reporting hierarchies.",
+  "dependencies": [
+    "microsoft",
+    "microsoft-authentication"
+  ],
+  "dependencyVersions": {
+    "microsoft": "^1.0.0",
+    "microsoft-authentication": "^1.0.0"
+  },
+  "icon": "icon.svg"
+}

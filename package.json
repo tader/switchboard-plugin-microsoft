@@ -5,10 +5,18 @@
   "version": "1.0.0",
   "scripts": {
     "check": "tsc --noEmit -p .",
-    "build:openapi": "node plugins/microsoft/openapi/build.ts"
+    "build:openapi": "node plugins/microsoft/openapi/build.ts",
+    "test": "node --test test/*.test.js plugins/teams/test/*.test.js",
+    "check:access": "node scripts/check-access.js",
+    "check:writes": "node scripts/check-writes.js",
+    "check:teams": "node scripts/check-teams.js",
+    "build:content": "node scripts/build-content.js",
+    "check:content": "node scripts/check-content.js"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "@xmldom/xmldom": "^0.9.12",
+    "esbuild": "^0.28.2",
     "typescript": "^5.9.0",
     "yaml": "^2.7.0"
   }

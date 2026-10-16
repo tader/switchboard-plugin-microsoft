@@ -66,6 +66,84 @@
         }
       ],
       "initial-version": "1.0.0"
+    },
+    "plugins/microsoft-authentication": {
+      "release-type": "node",
+      "component": "microsoft-authentication",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ],
+      "initial-version": "1.0.0"
+    },
+    "plugins/excel": {
+      "release-type": "node",
+      "component": "excel",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ],
+      "initial-version": "1.0.0"
+    },
+    "plugins/teams": {
+      "release-type": "node",
+      "component": "teams-web",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ],
+      "initial-version": "0.11.0"
+    },
+    "plugins/word": {
+      "release-type": "node",
+      "component": "word",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ],
+      "initial-version": "1.0.0"
+    },
+    "plugins/powerpoint": {
+      "release-type": "node",
+      "component": "powerpoint",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ],
+      "initial-version": "1.0.0"
+    },
+    "plugins/org-explorer": {
+      "release-type": "node",
+      "component": "org-explorer",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ],
+      "initial-version": "1.0.0"
     }
   }
 }
