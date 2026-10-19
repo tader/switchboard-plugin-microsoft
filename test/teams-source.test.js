@@ -44,7 +44,7 @@ test('Teams source renews the issuing client, persists rotations, and works from
 });
 test('terminal Teams renewal rejection reacquires from the selected source, never an independent browser',async()=>{
  const f=fixture();await f.session.connectSource({authenticationSource:'laptop'});f.rejectRefresh();await f.session.ensure(true);
- assert.equal(f.supplied.length,2);assert.equal(f.supplied[1].ref,'laptop');assert.equal(f.supplied[1].forceAuthentication,true);
+ assert.equal(f.supplied.length,2);assert.equal(f.supplied[1].ref,'laptop');assert.equal(f.supplied[1].forceAuthentication,false);
  await assert.rejects(f.session.login(),{code:'signin_required'});await f.session.close();
 });
 test('Teams and Outlook clients cannot exchange origins during import or renewal',()=>{
@@ -85,6 +85,15 @@ test('Teams offers the same shared authentication picker as other Microsoft prod
   const response = await fetch(request.url, { headers: request.headers });
   assert.equal(response.status, 200);
   assert.equal((await response.json()).authMode, 'microsoft');
+  const before = f.requests.length;
+  const renewal = { method: 'GET', url: new URL('/status?renew=true', adapter.services[0].baseUrl), headers: new Headers() };
+  await method.authorize(renewal, connected);
+  assert(f.requests.length > before, 'the explicit status probe exercises token renewal');
+  const renewed = await fetch(renewal.url, { headers: renewal.headers });
+  assert.equal(renewed.status, 200);
+  assert.equal((await renewed.json()).ready, true);
+  assert.equal(directoryChecks, 1, 'status renewal must not list chats or probe directory data');
+
 });
 
 test('Teams shows an upgrade message instead of silently omitting shared authentication on older cores', async t => {
@@ -99,4 +108,46 @@ test('Teams shows an upgrade message instead of silently omitting shared authent
   await assert.rejects(visible[0].connect({ config: {} }), { code: 'core_upgrade_required' });
   assert(methods.find(method => method.id === 'browser').authorize);
   assert(methods.find(method => method.id === 'tokens').authorize);
+});
+
+
+test('Teams retries a reconnected source before forcing another browser authentication', async () => {
+  const f = fixture();
+  await f.session.connectSource({ authenticationSource: 'laptop' });
+  const previous = structuredClone(f.session.credentials);
+  const latest = { ...bundle(), generation: randomUUID(), refreshToken: 'fresh-local-login' };
+  const calls = [];
+  f.ctx.credentials.obtain = async (ref, opts) => {
+    calls.push(opts.forceAuthentication);
+    assert.equal(opts.forceAuthentication, false, 'a fresh local login must not trigger another browser');
+    return { format: web.FORMAT, bundle: latest, account: { id: `${tenant}:${oid}`, label: 'fixture@example.test' } };
+  };
+  f.rejectRefresh();
+  await f.session.ensure(true);
+  assert.deepEqual(calls, [false]);
+  assert.notEqual(f.session.credentials.microsoft.generation, previous.microsoft.generation);
+  assert.equal(f.session.credentials.microsoft.generation, latest.generation);
+  assert.equal(f.session.status().ready, true);
+  await f.session.close();
+});
+
+test('Teams forces authentication only after the current source session also fails renewal', async () => {
+  const f = fixture();
+  await f.session.connectSource({ authenticationSource: 'laptop' });
+  const original = f.session.web.refresh;
+  let forced = false, refreshes = 0;
+  f.session.web.refresh = async (b, opts) => {
+    refreshes++;
+    if (!forced) { const e = new Error('Expired fixture session'); e.reauthenticationRequired = true; throw e; }
+    return original(b, opts);
+  };
+  f.ctx.credentials.obtain = async (ref, opts) => {
+    f.supplied.push({ ref, ...opts });
+    forced = opts.forceAuthentication;
+    return { format: web.FORMAT, bundle: bundle(), account: { id: `${tenant}:${oid}`, label: 'fixture@example.test' } };
+  };
+  await f.session.ensure(true);
+  assert.deepEqual(f.supplied.slice(1).map(call => call.forceAuthentication), [false, true]);
+  assert.equal(refreshes, 4);
+  await f.session.close();
 });

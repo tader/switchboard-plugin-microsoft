@@ -6,6 +6,8 @@ For one Microsoft sign-in, first connect **Microsoft Authentication** (Teams web
 
 Teams setup offers **Use Microsoft Authentication**, with the same authentication connection selector as the other Microsoft products. A Switchboard version supporting authentication sources and hidden legacy methods is required. Existing **Microsoft sign-in through local Chrome** and **Import Teams tokens** connections continue to work, but these legacy choices are hidden from setup. Reconnect an existing connection and select **Use Microsoft Authentication** to migrate it in place. Outlook-issued web credentials cannot authorize Teams chat even when token issuance succeeds; reconnect the source using its default Teams sign-in. All data operations use APIs. Browser automation is used for authentication only.
 
+To diagnose authentication without reading Teams content, call `getTeamsStatus` with `renew=true`. This renews tokens and returns status only. If a consumer has an expired session, it first obtains the authentication source’s current cached session; another browser sign-in is requested only if that session is also rejected.
+
 Legacy standalone documentation and scripts follow for compatibility:
 
 # Teams API plugin for Switchboard
