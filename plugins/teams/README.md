@@ -1,6 +1,6 @@
 # Teams in the Microsoft plugin family
 
-Install `plugins/teams` from `tader/switchboard-plugin-microsoft`. The plugin and service ID remain `teams-web`, so existing connections, API routes, saved calls, profile directories and durable send/read-state ledgers continue to work. The complete current API adapter and convenience methods are retained.
+Install `plugins/teams` from `tader/switchboard-plugin-microsoft`. The plugin and service ID remain `teams-web`, so existing connections, API routes, saved calls, profile directories and durable send/read-state ledgers continue to work. The complete current API adapter and convenience methods are retained. Stable releases use `teams-v<version>` tags to match the `plugins/teams` installation folder; the plugin ID remains `teams-web`.
 
 For one Microsoft sign-in, first connect **Microsoft Authentication** (Teams web sign-in), then connect Teams using **Use Microsoft Authentication** and select that source. Select the same source for Outlook, Graph, OneDrive, To Do and Excel. For a server, explicitly share authentication from the laptop to the direct peer and select the received source on a local Teams connection. Tokens renew by HTTP with cached credentials while the laptop is offline. A fresh provider-required sign-in happens on the authentication source device.
 
@@ -27,7 +27,7 @@ npm test
 npm run install:local -- ~/switchboard/.data
 ```
 
-The installer stages code outside the plugin watcher, replaces `.data/plugins/teams-web`, and saves the previous code under `.data/plugin-backups/`. It does not change connection records, encrypted credentials, or `.data/plugin-data/teams-web`. Reload or restart Switchboard after installing. This branch has not been published as a GitHub release.
+The installer stages code outside the plugin watcher, replaces `.data/plugins/teams-web`, and saves the previous code under `.data/plugin-backups/`. It does not change connection records, encrypted credentials, or `.data/plugin-data/teams-web`. Reload or restart Switchboard after installing. For stable installations, select the `plugins/teams` folder and **Latest release version**.
 
 In Switchboard, reconnect the existing Teams connection once (or add a new Teams connection). Choose Microsoft sign-in through local Chrome, or Import Teams tokens for a browser-free host (see below). For browser sign-in, enter your work email as the optional Microsoft work email hint. Complete sign-in in the dedicated browser window; it closes automatically when authentication finishes. `LOCAL-BROWSER` is only a placeholder in the connection dialog.
 

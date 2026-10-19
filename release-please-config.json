@@ -95,7 +95,7 @@
     },
     "plugins/teams": {
       "release-type": "node",
-      "component": "teams-web",
+      "component": "teams",
       "include-component-in-tag": true,
       "extra-files": [
         {
