@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-authentication-v1.1.0...microsoft-authentication-v1.1.1) (2026-10-19)
+
+
+### Bug Fixes
+
+* make authentication connection tests validate identity ([e6ff6cf](https://github.com/tader/switchboard-plugin-microsoft/commit/e6ff6cffa35797ad523e212299a3bf91a419938d))
+* validate authentication sources with identity probes ([dac7134](https://github.com/tader/switchboard-plugin-microsoft/commit/dac7134bc49556fddeb0da2baa642059d7bed1ff))
+
 ## [1.1.0](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-authentication-v1.0.0...microsoft-authentication-v1.1.0) (2026-10-16)
 
 
