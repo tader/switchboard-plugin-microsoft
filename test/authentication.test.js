@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import setupAuthentication from '../plugins/microsoft-authentication/index.ts';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -115,4 +116,28 @@ test('native Outlook descriptions use their actual JSON dialect and never replac
   assert.equal(mail.paths['/me/sendmail'].post.requestBody.content['application/json'].example.Message.Subject, 'Hello');
   assert.ok(outlookSpec('microsoft-todo').paths['/me/tasks/{task-id}/complete']);
   assert.ok(!mail.paths['/me/todo/lists']);
+});
+
+
+test('authentication connection tests probe identity without exposing product APIs', async () => {
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {} });
+  const service = plugin.services[0], method = service.authMethods[0];
+  const credentials = { profile: 'fixture-profile', bundle: bundle() };
+  const conn = { credentials, config: {} };
+  try {
+    for (const verb of ['GET', 'HEAD']) for (const suffix of ['', '/', '?$expand=messages']) {
+      const req = { method: verb, url: new URL(service.baseUrl + suffix), headers: new Headers() };
+      await method.authorize(req, conn, {});
+      assert.equal(req.url.origin, graph);
+      assert.equal(req.url.pathname, '/v1.0/me');
+      assert.equal(req.url.searchParams.get('$select'), 'id,displayName,mail,userPrincipalName');
+      assert.equal(req.url.searchParams.has('$expand'), false);
+      assert.equal(req.headers.get('authorization'), 'Bearer fixture-access');
+    }
+    for (const [verb, url] of [['POST', graph + '/v1.0'], ['GET', graph + '/v1.0/me/messages'], ['GET', graph + '/v1.0/users'], ['GET', 'https://evil.example/v1.0']]) {
+      const req = { method: verb, url: new URL(url), headers: new Headers() };
+      await assert.rejects(method.authorize(req, conn, {}), { code: 'request_forbidden' });
+      assert.equal(req.headers.has('authorization'), false);
+    }
+  } finally { plugin.dispose(); }
 });
