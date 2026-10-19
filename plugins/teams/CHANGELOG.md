@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.2](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-web-v0.12.1...teams-web-v0.12.2) (2026-10-19)
+
+
+### Bug Fixes
+
+* recover Teams from an already-reconnected Microsoft source ([ac48b45](https://github.com/tader/switchboard-plugin-microsoft/commit/ac48b45e8ae37293abbd490e37a663310ab899fc))
+* reuse reconnected Microsoft sessions before forcing sign-in ([0d967aa](https://github.com/tader/switchboard-plugin-microsoft/commit/0d967aa687b77817b6e34665a6da1be745eb880a))
+
 ## [0.12.1](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-web-v0.12.0...teams-web-v0.12.1) (2026-10-16)
 
 
