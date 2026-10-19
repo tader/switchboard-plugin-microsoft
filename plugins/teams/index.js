@@ -219,12 +219,13 @@ export async function createAdapter(ctx, {
       const { session } = get(connection.credentials.profile); session.adopt(connection.credentials);
       session.sourceConfig = connection.config; session.persistCredentials = persistCredentials; session.signal = signal;
       const control = ['/status', '/diagnostics', '/capabilities', '/login'].includes(request.url.pathname);
-      if (!control && pending.has(session.profile)) throw new AdapterError('signin_pending', 'Complete the pending connection sign-in.', 503);
+      const renewStatus = request.url.pathname === '/status' && request.url.searchParams.get('renew') === 'true';
+      if ((!control || renewStatus) && pending.has(session.profile)) throw new AdapterError('signin_pending', 'Complete the pending connection sign-in.', 503);
       let authorizationError;
-      if (!control) {
+      if (!control || renewStatus) {
         const before = session.credentials;
         try {
-          await session.ensure(force);
+          await session.ensure(force || renewStatus);
           if (request.url.pathname === '/search/messages' || request.url.pathname === '/people' && !request.url.searchParams.get('query')?.includes('@')) await session.ensureSearch();
         }
         catch (error) {

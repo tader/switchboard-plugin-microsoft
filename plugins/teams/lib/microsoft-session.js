@@ -44,9 +44,19 @@ export class MicrosoftTeamsSession extends TeamsSession {
       }
     } catch (error) {
       if (!error.reauthenticationRequired) throw error;
-      const supplied = await this.source(bundle, true); bundle = supplied.bundle;
+      // The source may already have been reconnected since this consumer cached its session.
+      // Try its current credentials before asking it to open another authentication browser.
+      bundle = (await this.source(bundle)).bundle;
       await this.persist(bundle);
-      for (const resource of ['skype', 'chatsvcagg', ...(search ? ['substrate'] : [])]) await renew(resource);
+      try {
+        if (!this.web.fresh(bundle)) await renew('graph');
+        for (const resource of ['skype', 'chatsvcagg', ...(search ? ['substrate'] : [])]) await renew(resource);
+      } catch (retryError) {
+        if (!retryError.reauthenticationRequired) throw retryError;
+        bundle = (await this.source(bundle, true)).bundle;
+        await this.persist(bundle);
+        for (const resource of ['skype', 'chatsvcagg', ...(search ? ['substrate'] : [])]) await renew(resource);
+      }
     }
     const tokens = Object.fromEntries(['skype', 'chatsvcagg', 'substrate'].filter(key => bundle.resources?.[key]).map(key => [key, { value: bundle.resources[key].accessToken, expiresAt: bundle.resources[key].expiresAt }]));
     this.credentials = { ...this.credentials, microsoft: bundle, tokens };

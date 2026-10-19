@@ -119,3 +119,6 @@ openapi.paths['/triage/replies'] = { post: {
 
 openapi.paths['/channels/{channelId}/threads'].get.parameters = clean(previous.paths['/channels/{channelId}/history'].get.parameters).filter(p => p.name !== 'maxWindows');
 openapi.paths['/channels/{channelId}/threads/{parentMessageId}/messages'].get.parameters = [{ name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 200, default: 100 } }];
+
+// Authentication-only diagnostics can exercise renewal without listing chats or messages.
+openapi.paths['/status'].get.parameters = [{ name: 'renew', in: 'query', required: false, schema: { type: 'boolean', default: false }, description: 'Renew authentication before reporting status. Exchanges tokens only; does not list chats, read messages, send content, or change read markers.' }];
