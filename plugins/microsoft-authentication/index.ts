@@ -68,6 +68,11 @@ export default function setup(ctx: PluginContext) {
     },
     async authorize(req, conn, opts) {
       // Authentication sources expose identity only; sharing one is an explicit credential-provider grant.
+      // Switchboard's connection test requests the base URL. Probe identity rather than rejecting a valid sign-in.
+      if (['GET', 'HEAD'].includes(req.method) && req.url.origin === 'https://graph.microsoft.com' && ['/v1.0', '/v1.0/'].includes(req.url.pathname)) {
+        req.url.pathname = '/v1.0/me';
+        req.url.search = '?$select=id,displayName,mail,userPrincipalName';
+      }
       if (!['GET', 'HEAD'].includes(req.method) || req.url.origin !== 'https://graph.microsoft.com' || req.url.pathname !== '/v1.0/me') throw fail('request_forbidden', 'Use a Microsoft product connection for data operations.', 403);
       const credentials = await usable(conn, opts);
       req.headers.set('authorization', `Bearer ${credentials.bundle.accessToken}`);
