@@ -1,8 +1,8 @@
 {
   "plugins/onedrive": "1.2.0",
-  "plugins/microsoft": "1.2.0",
+  "plugins/microsoft": "1.2.1",
   "plugins/outlook-calendar": "1.2.0",
-  "plugins/outlook-mail": "1.2.0",
+  "plugins/outlook-mail": "1.2.1",
   "plugins/microsoft-todo": "1.2.0",
   "plugins/microsoft-authentication": "1.1.2",
   "plugins/excel": "1.1.0",
