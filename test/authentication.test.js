@@ -141,3 +141,66 @@ test('authentication connection tests probe identity without exposing product AP
     }
   } finally { plugin.dispose(); }
 });
+
+
+test('expired Microsoft consumers reuse a reconnected source before forcing browser authentication', async () => {
+  const original = globalThis.fetch;
+  try {
+    for (const backend of ['graph', 'outlook']) {
+      const stale = { ...bundle(), refreshToken: 'stale-refresh', expiresAt: 0 };
+      const current = bundle(), obtained = [], saved = [];
+      let exchanges = 0;
+      globalThis.fetch = async (url, options) => {
+        if (String(url).includes('/token')) {
+          exchanges++;
+          if (options.body.get('refresh_token') === 'stale-refresh') return response({ error: 'invalid_grant' }, 400);
+          assert.equal(options.body.get('refresh_token'), current.refreshToken);
+          assert.ok(options.body.get('scope').startsWith(outlook));
+          return response({ access_token: 'new-outlook-access', token_type: 'Bearer', expires_in: 3600, scope: `${outlook}/Mail.ReadWrite` });
+        }
+        return response({ id: oid, mail: 'fixture@example.test' });
+      };
+      const method = createConsumerAuth({ credentials: { obtain: async (ref, opts) => {
+        obtained.push({ ref, ...opts });
+        assert.equal(opts.forceAuthentication, false, 'the source already has a valid reconnected session');
+        return { format: FORMAT, bundle: current, account: { id: `${tenant}:${oid}`, label: 'Fixture' } };
+      } } }, { id: backend === 'graph' ? 'onedrive' : 'outlook-mail', scopes: backend === 'graph' ? ['Files.ReadWrite.All'] : ['Mail.ReadWrite'] });
+      const result = await method.token({ methodId: 'authentication-source', credentials: stale, config: { authenticationSource: 'laptop', backend } }, { persistCredentials: value => { saved.push(value); } });
+      assert.equal(result.accessToken, backend === 'graph' ? current.accessToken : 'new-outlook-access');
+      assert.equal(obtained.length, 1);
+      assert.equal(obtained[0].ref, 'laptop');
+      assert.equal(exchanges, backend === 'graph' ? 1 : 2);
+      assert.equal(saved[0].refreshToken, current.refreshToken, 'retain the reconnected session before subsequent renewal');
+    }
+  } finally { globalThis.fetch = original; }
+});
+
+test('Outlook forces authentication only after current source renewal also requires sign-in', async () => {
+  const original = globalThis.fetch;
+  try {
+    for (const retryError of ['invalid_grant', 'temporarily_unavailable']) {
+      const obtained = [], saved = [];
+      globalThis.fetch = async (url, options) => {
+        if (!String(url).includes('/token')) return response({ id: oid });
+        const rt = options.body.get('refresh_token');
+        if (rt === 'stale-refresh') return response({ error: 'invalid_grant' }, 400);
+        if (rt === 'fixture-refresh') return response({ error: retryError }, retryError === 'invalid_grant' ? 400 : 429);
+        assert.equal(rt, 'reauthenticated-refresh');
+        return response({ access_token: 'outlook-access', token_type: 'Bearer', expires_in: 3600, scope: `${outlook}/Mail.ReadWrite` });
+      };
+      const method = createConsumerAuth({ credentials: { obtain: async (_ref, opts) => {
+        obtained.push(opts.forceAuthentication);
+        return { format: FORMAT, bundle: { ...bundle(), refreshToken: opts.forceAuthentication ? 'reauthenticated-refresh' : 'fixture-refresh' }, account: { id: `${tenant}:${oid}` } };
+      } } }, { id: 'outlook-mail', scopes: ['Mail.ReadWrite'] });
+      const request = method.token({ methodId: 'authentication-source', credentials: { ...bundle(), refreshToken: 'stale-refresh' }, config: { authenticationSource: 'laptop', backend: 'outlook' } }, { persistCredentials: value => { saved.push(value); } });
+      if (retryError === 'invalid_grant') {
+        assert.equal((await request).accessToken, 'outlook-access');
+        assert.deepEqual(obtained, [false, true]);
+        assert.equal(saved.at(-1).refreshToken, 'reauthenticated-refresh');
+      } else {
+        await assert.rejects(request, { code: 'refresh_rate_limited' });
+        assert.deepEqual(obtained, [false], 'transient errors never request browser authentication');
+      }
+    }
+  } finally { globalThis.fetch = original; }
+});
