@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.1](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-v1.2.0...microsoft-v1.2.1) (2026-10-20)
+
+
+### Bug Fixes
+
+* **outlook-mail:** include mailbox settings in full access ([7c01ead](https://github.com/tader/switchboard-plugin-microsoft/commit/7c01ead75a66071fe4da28816e251c2933ba4253))
+* **outlook-mail:** include mailbox settings in full access ([048449c](https://github.com/tader/switchboard-plugin-microsoft/commit/048449c14d748f4f1fbdf6c8f38b38b4879186e5))
+
 ## [1.2.0](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-v1.1.0...microsoft-v1.2.0) (2026-10-16)
 
 
