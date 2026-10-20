@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-authentication-v1.1.1...microsoft-authentication-v1.1.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* reuse reconnected sources across Microsoft consumers ([e8609d1](https://github.com/tader/switchboard-plugin-microsoft/commit/e8609d18fe9f5b09b5d2ed57937448957a11fb89))
+* reuse reconnected sources across Microsoft consumers ([8e08427](https://github.com/tader/switchboard-plugin-microsoft/commit/8e08427d67e8e9bf00f3709020c414782aaf05c0))
+
 ## [1.1.1](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-authentication-v1.1.0...microsoft-authentication-v1.1.1) (2026-10-19)
 
 

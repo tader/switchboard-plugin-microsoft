@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.3](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.12.2...teams-v0.12.3) (2026-10-20)
+
+
+### Bug Fixes
+
+* align Teams release tags with plugin folder ([be74ed0](https://github.com/tader/switchboard-plugin-microsoft/commit/be74ed05a90e6192019674d8d1f3a0fd9d8adb8c))
+* align Teams release tags with plugin folder ([8bfc7cb](https://github.com/tader/switchboard-plugin-microsoft/commit/8bfc7cb504a78be8ff0ab2161756aaec04292ce7))
+
 ## [0.12.2](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-web-v0.12.1...teams-web-v0.12.2) (2026-10-19)
 
 
