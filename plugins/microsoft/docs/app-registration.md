@@ -33,7 +33,7 @@ Under **API permissions → Add a permission → Microsoft Graph → Delegated p
 | Service | Permissions |
 |---|---|
 | Always | `offline_access`, `openid`, `profile`, `email`, `User.Read` |
-| Outlook Mail | `Mail.Read` for read access; add `Mail.Send` for send access; `Mail.ReadWrite`, `Mail.Send` and `MailboxSettings.ReadWrite` for full access |
+| Outlook Mail | `Mail.Read`, or `Mail.ReadWrite` and `Mail.Send` |
 | Outlook Calendar | `Calendars.Read` or `Calendars.ReadWrite` |
 | OneDrive | `Files.Read`, `Files.ReadWrite` or `Files.ReadWrite.All` |
 | Microsoft To Do | `Tasks.Read` or `Tasks.ReadWrite` |
