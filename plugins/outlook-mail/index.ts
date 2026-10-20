@@ -1,7 +1,7 @@
 import type { PluginContext } from './types/api.d.ts';
 import type * as Microsoft from './types/microsoft.d.ts';
 
-const SCOPES: Record<string, string[]> = { read: ['Mail.Read'], send: ['Mail.Read', 'Mail.Send'], full: ['Mail.ReadWrite', 'Mail.Send'] };
+const SCOPES: Record<string, string[]> = { read: ['Mail.Read'], send: ['Mail.Read', 'Mail.Send'], full: ['Mail.ReadWrite', 'Mail.Send', 'MailboxSettings.ReadWrite'] };
 
 export default function setup(ctx: PluginContext) {
   const { microsoftService } = ctx.require<ReturnType<typeof Microsoft.default>['exports']>('microsoft');
