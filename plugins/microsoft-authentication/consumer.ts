@@ -94,8 +94,19 @@ export function createConsumerAuth(ctx: PluginContext, options: ConsumerOptions)
     try { bundle = await refresh(bundle, { resource, signal: opts.signal, onRotate: async next => { await opts.persistCredentials?.(next); } }); }
     catch (error: any) {
       if (!error.reauthenticationRequired) throw error;
-      bundle = await obtain(conn.config, true, bundle, opts.signal);
-      if (resource === 'outlook') bundle = await refresh(bundle, { resource, signal: opts.signal, onRotate: async next => { await opts.persistCredentials?.(next); } });
+      // A consumer may still hold the session from before the source was reconnected.
+      // Reuse the source's current credentials before requesting browser authentication.
+      bundle = await obtain(conn.config, false, bundle, opts.signal);
+      await opts.persistCredentials?.(bundle);
+      if (resource === 'outlook') {
+        try { bundle = await refresh(bundle, { resource, signal: opts.signal, onRotate: async next => { await opts.persistCredentials?.(next); } }); }
+        catch (retryError: any) {
+          if (!retryError.reauthenticationRequired) throw retryError;
+          bundle = await obtain(conn.config, true, bundle, opts.signal);
+          await opts.persistCredentials?.(bundle);
+          bundle = await refresh(bundle, { resource, signal: opts.signal, onRotate: async next => { await opts.persistCredentials?.(next); } });
+        }
+      }
     }
     if (!coversScopes(grantedScopes(bundle), required(conn.config))) throw fail('permission_unavailable', 'The web session no longer grants the permissions required by this connection.', 403);
     return bundle;
