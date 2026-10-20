@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.2](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-mail-v1.2.1...outlook-mail-v1.2.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* **outlook-mail:** revert mandatory mailbox settings scope ([e3cfe95](https://github.com/tader/switchboard-plugin-microsoft/commit/e3cfe9577499a356701fd94e2746f1be622c5963))
+* **outlook-mail:** revert mandatory mailbox settings scope ([777e147](https://github.com/tader/switchboard-plugin-microsoft/commit/777e1474a2af98e668f42dbffe0be80c44d499cb))
+
 ## [1.2.1](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-mail-v1.2.0...outlook-mail-v1.2.1) (2026-10-20)
 
 
