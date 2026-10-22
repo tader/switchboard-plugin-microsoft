@@ -11,7 +11,7 @@ Use your existing Microsoft web access without registering an application. This 
 ## Connect on your laptop
 
 1. Install **Microsoft Authentication** (`plugins/microsoft-authentication`) on the computer used for sign-in, with Edge or Chrome available. Install the Microsoft product plugins you want. Update the shared **Microsoft** helper before adding Word, PowerPoint or Org Explorer to an existing installation.
-2. Add a **Microsoft Authentication** connection and choose **Sign in through local browser**. Complete sign-in in the dedicated Edge or Chrome window. The window closes when authentication finishes. `LOCAL-BROWSER` is a placeholder, not a Microsoft device code.
+2. Add a **Microsoft Authentication** connection and choose **Sign in through local browser**. Complete sign-in in the dedicated Edge or Chrome window. The window closes when authentication finishes. Switchboard shows browser sign-in instructions; no device code is needed. Upgrade Switchboard if browser sign-in is reported as unavailable.
 3. Add Outlook Mail, Calendar, OneDrive, To Do, Excel, Teams, Word, PowerPoint, Org Explorer or Microsoft Graph. Choose **Use Microsoft Authentication**, select your authentication connection and choose its access level.
 
 The browser is used only for authentication. Credentials are encrypted by Switchboard. Data operations call Microsoft APIs directly. Graph and Outlook product connections share a cached credential bundle and serialize renewal. Teams caches its derived API and chat tokens from the same source.

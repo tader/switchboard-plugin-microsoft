@@ -270,10 +270,12 @@ export async function createAdapter(ctx, {
           } catch (error) { await entry.session.close(); throw error; }
         },
         ...sharedAuth,
-      }, { hidden: true, id: 'browser', name: 'Microsoft sign-in through local Chrome',
+      }, { hidden: true, unavailable: ctx.capabilities?.deviceBrowser ? undefined : 'Upgrade Switchboard to use browser sign-in.', id: 'browser', name: 'Microsoft sign-in through local Chrome',
         description: 'Sign in once in a dedicated local Chrome profile. Tokens are stored encrypted by Switchboard. Chrome closes after authentication; API calls renew tokens automatically when possible.',
         fields: [{ key: 'label', label: 'Account label', required: true }, { key: 'loginHint', label: 'Microsoft work email', description: 'Optional account hint for sign-in.' }],
         async connect({ config, connection }) {
+          if (!ctx.capabilities?.deviceBrowser) throw new AdapterError('core_upgrade_required', 'Upgrade Switchboard to use browser sign-in.', 503);
+          const device = ctx.require('microsoft-authentication').webSession.browserAuthorization(900);
           const profile = connection?.credentials?.profile ?? randomUUID();
           const previousFlow = pending.get(profile);
           if (previousFlow) { await previousFlow.entry.session.close(); pending.delete(profile); }
@@ -287,7 +289,7 @@ export async function createAdapter(ctx, {
             await sessions.get(profile)?.session.queue;
             await session.login(loginHint);
           } catch (error) { pending.delete(profile); await session.close(); throw error; }
-          return { device: { userCode: 'LOCAL-BROWSER', verificationUri: 'https://login.microsoftonline.com/', expiresIn: 900, interval: 3 }, pending: { profile, expires, attempt } };
+          return { device, pending: { profile, expires, attempt } };
         },
         async poll({ pending: flow }) {
           const active = pending.get(flow.profile);

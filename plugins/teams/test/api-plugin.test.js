@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import { createAdapter } from '../index.js';
+import { browserAuthorization } from '../../microsoft-authentication/lib/browser-presentation.js';
 import { TeamsSession, exchangeChatToken } from '../lib/api-auth.js';
 import { TeamsTriage, readStateProtocols } from '../lib/triage.js';
 import { TeamsAPI, messagePayload, encodeConversation } from '../lib/teams-api.js';
@@ -65,7 +66,7 @@ async function fixture(t, { forbidBrowser = false, dataDir, peerMessages = false
     if (/\/messages\/1(?:\/properties)?$/.test(url.pathname)) return new Response(null, { status: 204 });
     throw new Error('Unexpected test request: ' + url.pathname);
   };
-  const instance = await createAdapter({ dataDir: directory, settings: {} }, {
+  const instance = await createAdapter({ dataDir: directory, settings: {}, capabilities: { deviceBrowser: true }, require: () => ({ webSession: { browserAuthorization: expiresIn => browserAuthorization({ deviceBrowser: true }, expiresIn) } }) }, {
     createSession(profile, dir, settings) {
       const session = new TeamsSession(profile, dir, settings, { fetcher, createAuthenticator: () => {
         if (forbidBrowser) throw new Error('A browser must never be created');
@@ -83,6 +84,9 @@ async function fixture(t, { forbidBrowser = false, dataDir, peerMessages = false
   const auth = instance.services[0].authMethods.find(method => method.id === 'browser');
   async function connect() {
     const flow = await auth.connect({ config: { label: 'Test' } });
+    assert.equal(flow.device.browser, true);
+    assert.equal(flow.device.userCode, undefined);
+    assert.equal(flow.device.verificationUri, undefined);
     await sessions.get(flow.pending.profile).loginTask;
     return auth.poll({ pending: flow.pending });
   }
