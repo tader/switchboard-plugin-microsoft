@@ -204,3 +204,86 @@ test('Outlook forces authentication only after current source renewal also requi
     }
   } finally { globalThis.fetch = original; }
 });
+
+test('browser sign-in returns instructions and reports capture errors through polling without fake device codes', async () => {
+  let captures = 0;
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+    captureBrowser: async () => { captures++; throw new Error('fixture browser launch failed'); },
+  });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    assert.equal(method.unavailable, undefined);
+    const flow = await method.connect({ config: {} });
+    assert.equal(flow.device.browser, true);
+    assert.match(flow.device.instructions, /open automatically on the computer running this Switchboard/);
+    assert.equal(flow.device.userCode, undefined);
+    assert.equal(flow.device.verificationUri, undefined);
+    await new Promise(resolve => setImmediate(resolve));
+    await assert.rejects(method.poll({ pending: flow.pending }), /fixture browser launch failed/);
+    assert.equal(captures, 2, 'silent sign-in falls back to the interactive browser');
+    await assert.rejects(method.poll({ pending: flow.pending }), { code: 'signin_expired' });
+  } finally { plugin.dispose(); }
+});
+
+test('old cores receive an upgrade requirement before Microsoft launches a browser', async () => {
+  let captures = 0;
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {} }, { captureBrowser: async () => { captures++; } });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    assert.match(method.unavailable, /Upgrade Switchboard/);
+    await assert.rejects(method.connect({ config: {} }), { code: 'core_upgrade_required' });
+    assert.equal(captures, 0);
+  } finally { plugin.dispose(); }
+});
+
+test('browser presentations complete both silent and interactive Microsoft sign-in', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async url => String(url).includes('/token')
+    ? response({ access_token: 'fixture-access', refresh_token: 'fixture-renewed', token_type: 'Bearer', expires_in: 3600, scope: `${graph}/User.Read` })
+    : response({ id: oid, mail: 'fixture@example.test' });
+  try {
+    for (const interactive of [false, true]) {
+      const captures = [];
+      const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+        captureBrowser: async (_directory, options) => {
+          captures.push(options.silent);
+          if (interactive && options.silent) throw new Error('fixture requires interactive sign-in');
+          return bundle();
+        },
+      });
+      try {
+        const method = plugin.services[0].authMethods[0];
+        const flow = await method.connect({ config: {} });
+        assert.equal(flow.device.browser, true);
+        let result;
+        for (let i = 0; i < 20; i++) {
+          result = await method.poll({ pending: flow.pending });
+          if (!result.wait) break;
+          await new Promise(resolve => setImmediate(resolve));
+        }
+        assert.equal(result.account.id, `${tenant}:${oid}`);
+        assert.equal(result.credentials.bundle.refreshToken, 'fixture-renewed');
+        assert.deepEqual(captures, interactive ? [true, false] : [true]);
+      } finally { plugin.dispose(); }
+    }
+  } finally { globalThis.fetch = original; }
+});
+
+test('browser sign-in expiry stays bounded and disposal aborts the browser capture', async t => {
+  let signal;
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+    captureBrowser: async (_directory, options) => {
+      signal = options.signal;
+      return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('fixture aborted')), { once: true }));
+    },
+  });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    const flow = await method.connect({ config: {} });
+    assert.deepEqual(await method.poll({ pending: flow.pending }), { wait: true });
+    const future = Date.now() + 600001;
+    t.mock.method(Date, 'now', () => future);
+    await assert.rejects(method.poll({ pending: flow.pending }), { code: 'signin_expired' });
+  } finally { plugin.dispose(); }
+  assert.equal(signal.aborted, true);
+});

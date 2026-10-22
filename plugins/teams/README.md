@@ -29,7 +29,7 @@ npm run install:local -- ~/switchboard/.data
 
 The installer stages code outside the plugin watcher, replaces `.data/plugins/teams-web`, and saves the previous code under `.data/plugin-backups/`. It does not change connection records, encrypted credentials, or `.data/plugin-data/teams-web`. Reload or restart Switchboard after installing. For stable installations, select the `plugins/teams` folder and **Latest release version**.
 
-In Switchboard, reconnect the existing Teams connection once (or add a new Teams connection). Choose Microsoft sign-in through local Chrome, or Import Teams tokens for a browser-free host (see below). For browser sign-in, enter your work email as the optional Microsoft work email hint. Complete sign-in in the dedicated browser window; it closes automatically when authentication finishes. `LOCAL-BROWSER` is only a placeholder in the connection dialog.
+In Switchboard, reconnect the existing Teams connection once (or add a new Teams connection). Choose Microsoft sign-in through local Chrome, or Import Teams tokens for a browser-free host (see below). For browser sign-in, enter your work email as the optional Microsoft work email hint. Complete sign-in in the dedicated browser window; it closes automatically when authentication finishes. The connection dialog shows browser sign-in instructions without a device code.
 
 Old DOM-only connections report `signin_required` until reconnected. Refresh chat/channel IDs by listing them again; exact legacy thread IDs can migrate after a membership check, but UI search, person and history cursors cannot. Existing send ledger entries remain preserved; a reused key with changed request semantics is rejected.
 
