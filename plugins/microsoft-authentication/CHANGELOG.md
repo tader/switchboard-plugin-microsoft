@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-authentication-v1.1.2...microsoft-authentication-v1.1.3) (2026-10-22)
+
+
+### Bug Fixes
+
+* explain automatic Microsoft browser sign-in ([#18](https://github.com/tader/switchboard-plugin-microsoft/issues/18)) ([e77a57a](https://github.com/tader/switchboard-plugin-microsoft/commit/e77a57a1a7a3d6fe264f10ff368d16a8ec1c9cc0))
+
 ## [1.1.2](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-authentication-v1.1.1...microsoft-authentication-v1.1.2) (2026-10-20)
 
 
