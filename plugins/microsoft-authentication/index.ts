@@ -50,12 +50,9 @@ export default function setup(ctx: PluginContext, { captureBrowser = acquireBrow
       const flow: PendingFlow = { profile, controller, expires: Date.now() + 600_000 };
       pending.set(id, flow);
       void (async () => {
-        let bundle: Bundle;
-        try { bundle = await capture(profile, true, connection?.credentials?.bundle, controller.signal); }
-        catch (error: any) {
-          if (controller.signal.aborted || error.code === 'account_mismatch') throw error;
-          bundle = await capture(profile, false, connection?.credentials?.bundle, controller.signal);
-        }
+        // Connect and Reconnect are explicit user actions. Show the requested
+        // browser immediately; usable() retains silent background renewal.
+        const bundle = await capture(profile, false, connection?.credentials?.bundle, controller.signal);
         flow.account = await identify(bundle, { signal: controller.signal });
         flow.result = { profile, bundle };
       })().catch(error => { flow.error = error; }).finally(() => controllers.delete(controller));

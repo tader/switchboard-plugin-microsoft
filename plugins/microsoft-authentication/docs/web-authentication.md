@@ -14,6 +14,8 @@ Use your existing Microsoft web access without registering an application. This 
 2. Add a **Microsoft Authentication** connection and choose **Sign in through local browser**. Complete sign-in in the dedicated Edge or Chrome window. The window closes when authentication finishes. Switchboard shows browser sign-in instructions; no device code is needed. Upgrade Switchboard if browser sign-in is reported as unavailable.
 3. Add Outlook Mail, Calendar, OneDrive, To Do, Excel, Teams, Word, PowerPoint, Org Explorer or Microsoft Graph. Choose **Use Microsoft Authentication**, select your authentication connection and choose its access level.
 
+Connect and Reconnect open the dedicated authentication window immediately, reusing the saved browser profile. Automatic credential renewal can still use silent authentication.
+
 The browser is used only for authentication. Credentials are encrypted by Switchboard. Data operations call Microsoft APIs directly. Graph and Outlook product connections share a cached credential bundle and serialize renewal. Teams caches its derived API and chat tokens from the same source.
 
 ## Use a server through a peer
