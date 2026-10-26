@@ -220,7 +220,7 @@ test('browser sign-in returns instructions and reports capture errors through po
     assert.equal(flow.device.verificationUri, undefined);
     await new Promise(resolve => setImmediate(resolve));
     await assert.rejects(method.poll({ pending: flow.pending }), /fixture browser launch failed/);
-    assert.equal(captures, 2, 'silent sign-in falls back to the interactive browser');
+    assert.equal(captures, 1, 'explicit sign-in opens one interactive browser without a hidden attempt');
     await assert.rejects(method.poll({ pending: flow.pending }), { code: 'signin_expired' });
   } finally { plugin.dispose(); }
 });
@@ -236,24 +236,24 @@ test('old cores receive an upgrade requirement before Microsoft launches a brows
   } finally { plugin.dispose(); }
 });
 
-test('browser presentations complete both silent and interactive Microsoft sign-in', async () => {
+test('new sign-in and reconnect open the interactive browser and complete normally', async () => {
   const original = globalThis.fetch;
   globalThis.fetch = async url => String(url).includes('/token')
     ? response({ access_token: 'fixture-access', refresh_token: 'fixture-renewed', token_type: 'Bearer', expires_in: 3600, scope: `${graph}/User.Read` })
     : response({ id: oid, mail: 'fixture@example.test' });
   try {
-    for (const interactive of [false, true]) {
+    for (const reconnect of [false, true]) {
       const captures = [];
       const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
         captureBrowser: async (_directory, options) => {
           captures.push(options.silent);
-          if (interactive && options.silent) throw new Error('fixture requires interactive sign-in');
           return bundle();
         },
       });
       try {
         const method = plugin.services[0].authMethods[0];
-        const flow = await method.connect({ config: {} });
+        const profile = '44444444-4444-4444-8444-444444444444';
+        const flow = await method.connect({ config: {}, ...(reconnect ? { connection: { credentials: { profile, bundle: bundle() } } } : {}) });
         assert.equal(flow.device.browser, true);
         let result;
         for (let i = 0; i < 20; i++) {
@@ -263,7 +263,8 @@ test('browser presentations complete both silent and interactive Microsoft sign-
         }
         assert.equal(result.account.id, `${tenant}:${oid}`);
         assert.equal(result.credentials.bundle.refreshToken, 'fixture-renewed');
-        assert.deepEqual(captures, interactive ? [true, false] : [true]);
+        assert.deepEqual(captures, [false]);
+        if (reconnect) assert.equal(result.credentials.profile, profile);
       } finally { plugin.dispose(); }
     }
   } finally { globalThis.fetch = original; }
@@ -286,4 +287,60 @@ test('browser sign-in expiry stays bounded and disposal aborts the browser captu
     await assert.rejects(method.poll({ pending: flow.pending }), { code: 'signin_expired' });
   } finally { plugin.dispose(); }
   assert.equal(signal.aborted, true);
+});
+
+
+test('explicit reconnect does not wait for the sixty-second silent sign-in deadline', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const calls = [], profile = '44444444-4444-4444-8444-444444444444';
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+    captureBrowser: async (directory, options) => {
+      calls.push({ directory, silent: options.silent, at: Date.now() });
+      return new Promise((_resolve, reject) => {
+        if (options.silent) setTimeout(() => reject(new Error('fixture silent sign-in expired')), 60_000);
+        options.signal.addEventListener('abort', () => reject(new Error('fixture cancelled')), { once: true });
+      });
+    },
+  });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    const flow = await method.connect({ config: {}, connection: { credentials: { profile, bundle: bundle() } } });
+    assert.deepEqual(calls, [{ directory: path.join('/unused', 'profiles', profile), silent: false, at: 0 }]);
+    assert.deepEqual(await method.poll({ pending: flow.pending }), { wait: true });
+    t.mock.timers.tick(60_000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls.length, 1, 'a delayed second browser must never be opened');
+  } finally {
+    plugin.dispose();
+    await new Promise(resolve => setImmediate(resolve));
+    t.mock.timers.reset();
+  }
+});
+
+test('background recovery stays silent and never opens an interactive fallback', async () => {
+  const calls = [];
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+    captureBrowser: async (_directory, options) => { calls.push(options.silent); throw new Error('fixture requires user interaction'); },
+  });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    await assert.rejects(method.credentialProvider.provide({ credentials: { profile: '44444444-4444-4444-8444-444444444444', bundle: bundle() } }, { forceAuthentication: true }), { code: 'signin_required' });
+    assert.deepEqual(calls, [true]);
+  } finally { plugin.dispose(); }
+});
+
+test('reconnect still refuses to replace the existing account with a different browser identity', async () => {
+  const original = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async () => { throw new Error('Account mismatch must be rejected before token exchange'); };
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+    captureBrowser: async (_directory, options) => { calls.push(options.silent); return { ...bundle(), identity: { tenant, oid: '55555555-5555-4555-8555-555555555555' } }; },
+  });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    const flow = await method.connect({ config: {}, connection: { credentials: { profile: '44444444-4444-4444-8444-444444444444', bundle: bundle() } } });
+    await new Promise(resolve => setImmediate(resolve));
+    await assert.rejects(method.poll({ pending: flow.pending }), { code: 'account_mismatch' });
+    assert.deepEqual(calls, [false]);
+  } finally { plugin.dispose(); globalThis.fetch = original; }
 });
