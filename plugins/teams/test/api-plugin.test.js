@@ -11,7 +11,7 @@ import { browserAuthorization } from '../../microsoft-authentication/lib/browser
 import { TeamsSession, exchangeChatToken } from '../lib/api-auth.js';
 import { TeamsTriage, readStateProtocols } from '../lib/triage.js';
 import { TeamsAPI, messagePayload, encodeConversation } from '../lib/teams-api.js';
-import { requestJSON, chatOrigin, tokenClaims } from '../lib/api-http.js';
+import { requestJSON, chatOrigin, tokenClaims, maxResponseMiB } from '../lib/api-http.js';
 import { AdapterError } from '../lib/errors.js';
 import { encodeTokenBundle } from '../lib/token-bundle.js';
 import { signedBundle, signedToken, proprietaryToken, serverAccepts, renewal } from './token-fixture.js';
@@ -284,6 +284,17 @@ test('history cursors replay, remain account-bound and reject credential-exfiltr
   const follow = await f.call(connection, `/chats/${id}/history?limit=1&cursor=${malicious.body.nextCursor}`);
   assert.equal(follow.body.error.code, 'api_cursor_rejected');
   assert.ok(f.requests.every(request => request.url.hostname !== 'evil.example'));
+});
+
+test('response size limit is configurable', async () => {
+  const large = () => new Response(JSON.stringify({ value: 'x'.repeat(9 * 1024 * 1024) }));
+  await assert.rejects(requestJSON('https://teams.microsoft.com/test', {}, async () => large()), error => error.code === 'api_response_too_large' && error.message.includes('8 MiB'));
+  assert.equal((await requestJSON('https://teams.microsoft.com/test', { maxResponseMiB: 16 }, async (_url, options) => { assert.equal(options.maxResponseMiB, undefined); return large(); })).value.length, 9 * 1024 * 1024);
+  assert.deepEqual(['16', ' 32 ', undefined, '', '0', '257', '1.5', 'abc', 16].map(maxResponseMiB), [16, 32, 8, 8, 8, 8, 8, 8, 8]);
+  let seen;
+  const api = new TeamsAPI({ credentials: { region: 'emea', tokens: { chatsvcagg: { value: 't' } } } }, { maxResponseMiB: 16, fetcher: async () => { seen = true; return large(); } });
+  await assert.doesNotReject(api.request('csa', 'teams/users/me'));
+  assert.ok(seen);
 });
 
 test('transport redacts remote errors, rejects untrusted regional hosts, and formats content safely', async () => {

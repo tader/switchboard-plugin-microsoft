@@ -1,6 +1,13 @@
 import { AdapterError } from './errors.js';
 
-export async function requestJSON(url, options = {}, fetcher = fetch) {
+export const DEFAULT_MAX_RESPONSE_MIB = 8;
+
+export function maxResponseMiB(value) {
+  const n = Number(value);
+  return typeof value === 'string' && /^\d+$/.test(value.trim()) && n >= 1 && n <= 256 ? n : DEFAULT_MAX_RESPONSE_MIB;
+}
+
+export async function requestJSON(url, { maxResponseMiB: limit = DEFAULT_MAX_RESPONSE_MIB, ...options } = {}, fetcher = fetch) {
   let response;
   const timeout = AbortSignal.timeout(20_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
@@ -20,7 +27,7 @@ export async function requestJSON(url, options = {}, fetcher = fetch) {
     while (true) {
       const { done, value } = await reader.read(); if (done) break;
       size += value.length;
-      if (size > 8 * 1024 * 1024) throw new AdapterError('api_response_too_large', 'Teams response exceeded 8 MiB.', 502);
+      if (size > limit * 1024 * 1024) throw new AdapterError('api_response_too_large', `Teams response exceeded ${limit} MiB. Raise the maximum response size in the Teams plugin settings.`, 502);
       chunks.push(value);
     }
   } catch (error) { await reader.cancel().catch(() => {}); throw error instanceof AdapterError ? error : new AdapterError('api_transport_failed', 'Teams response was interrupted.', 502); }
