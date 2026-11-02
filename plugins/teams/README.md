@@ -8,6 +8,8 @@ Teams setup offers **Use Microsoft Authentication**, with the same authenticatio
 
 To diagnose authentication without reading Teams content, call `getTeamsStatus` with `renew=true`. This renews tokens and returns status only. If a consumer has an expired session, it first obtains the authentication source’s current cached session; another browser sign-in is requested only if that session is also rejected.
 
+For large accounts that exceed the default 8 MiB API response limit, set **Maximum API response size (MiB)** (`maxResponseMiB`) in the Teams plugin settings. Use a whole number from 1 to 256; invalid values use 8. Increase it only as needed: buffering and parsing larger responses uses more memory, especially with concurrent requests.
+
 Legacy standalone documentation and scripts follow for compatibility:
 
 # Teams API plugin for Switchboard

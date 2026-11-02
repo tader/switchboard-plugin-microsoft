@@ -3,11 +3,14 @@ import { AdapterError } from './errors.js';
 export const DEFAULT_MAX_RESPONSE_MIB = 8;
 
 export function maxResponseMiB(value) {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+$/.test(value.trim()))) return DEFAULT_MAX_RESPONSE_MIB;
   const n = Number(value);
-  return typeof value === 'string' && /^\d+$/.test(value.trim()) && n >= 1 && n <= 256 ? n : DEFAULT_MAX_RESPONSE_MIB;
+  return Number.isInteger(n) && n >= 1 && n <= 256 ? n : DEFAULT_MAX_RESPONSE_MIB;
 }
 
 export async function requestJSON(url, { maxResponseMiB: limit = DEFAULT_MAX_RESPONSE_MIB, ...options } = {}, fetcher = fetch) {
+  // Enforce the cap here as well as at the plugin settings boundary.
+  limit = maxResponseMiB(limit);
   let response;
   const timeout = AbortSignal.timeout(20_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;

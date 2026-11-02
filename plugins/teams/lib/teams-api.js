@@ -131,7 +131,7 @@ export class TeamsAPI {
     if (!url.href.startsWith(base) || url.username || url.password) throw new AdapterError('api_url_rejected', 'Invalid Teams API target.', 400);
     if (service === 'search' && !c.tokens.substrate?.value) throw new AdapterError('search_token_required', 'Search requires a Substrate token acquired using renewal credentials.', 503);
     const auth = service === 'messages' ? { Authentication: `skypetoken=${c.chatToken.value}` } : { Authorization: `Bearer ${c.tokens[service === 'search' ? 'substrate' : service === 'csa' ? 'chatsvcagg' : 'skype']?.value}` };
-    return requestJSON(url.href, { ...options, ...(this.maxResponseMiB ? { maxResponseMiB: this.maxResponseMiB } : {}), headers: { ...auth, ...(options.body ? { 'content-type': 'application/json' } : {}) } }, this.fetcher);
+    return requestJSON(url.href, { ...options, maxResponseMiB: this.maxResponseMiB, headers: { ...auth, ...(options.body ? { 'content-type': 'application/json' } : {}) } }, this.fetcher);
   }
   conversationURL(limit, link) {
     const first = new URL(`users/ME/conversations?view=mychats&pageSize=${limit}`, this.credentials.messageOrigin + '/v1/');
