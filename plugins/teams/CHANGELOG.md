@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.5](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.12.4...teams-v0.12.5) (2026-11-02)
+
+
+### Bug Fixes
+
+* enforce Teams response limit at the transport boundary ([b9cc7eb](https://github.com/tader/switchboard-plugin-microsoft/commit/b9cc7ebdd3cac299e05f2d1bb266971db2bcb605))
+* make Teams response size limit configurable ([ff2c19b](https://github.com/tader/switchboard-plugin-microsoft/commit/ff2c19bf298de0d7acbd38866e7e60269b57584b))
+* make Teams response size limit configurable ([3a85d8d](https://github.com/tader/switchboard-plugin-microsoft/commit/3a85d8d4483e9ada1a034b07ecac3bd12703d430))
+
 ## [0.12.4](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.12.3...teams-v0.12.4) (2026-10-22)
 
 
