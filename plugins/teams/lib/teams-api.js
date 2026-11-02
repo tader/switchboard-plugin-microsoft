@@ -117,7 +117,7 @@ export function addQuote(payload, selected) {
 }
 
 export class TeamsAPI {
-  constructor(session, { fetcher = fetch } = {}) { this.session = session; this.fetcher = fetcher; this.cursors = new Map(); this.searchResults = new Map(); this.discoveryCursors = new Map(); }
+  constructor(session, { fetcher = fetch, maxResponseMiB } = {}) { this.session = session; this.fetcher = fetcher; this.maxResponseMiB = maxResponseMiB; this.cursors = new Map(); this.searchResults = new Map(); this.discoveryCursors = new Map(); }
   get credentials() {
     const c = this.session.credentials;
     if (!c) throw new AdapterError('signin_required', 'Reconnect this connection to enable API authentication.', 503);
@@ -131,7 +131,7 @@ export class TeamsAPI {
     if (!url.href.startsWith(base) || url.username || url.password) throw new AdapterError('api_url_rejected', 'Invalid Teams API target.', 400);
     if (service === 'search' && !c.tokens.substrate?.value) throw new AdapterError('search_token_required', 'Search requires a Substrate token acquired using renewal credentials.', 503);
     const auth = service === 'messages' ? { Authentication: `skypetoken=${c.chatToken.value}` } : { Authorization: `Bearer ${c.tokens[service === 'search' ? 'substrate' : service === 'csa' ? 'chatsvcagg' : 'skype']?.value}` };
-    return requestJSON(url.href, { ...options, headers: { ...auth, ...(options.body ? { 'content-type': 'application/json' } : {}) } }, this.fetcher);
+    return requestJSON(url.href, { ...options, maxResponseMiB: this.maxResponseMiB, headers: { ...auth, ...(options.body ? { 'content-type': 'application/json' } : {}) } }, this.fetcher);
   }
   conversationURL(limit, link) {
     const first = new URL(`users/ME/conversations?view=mychats&pageSize=${limit}`, this.credentials.messageOrigin + '/v1/');

@@ -12,6 +12,7 @@ import { messageText, messageId, recipientEmail, reactionInput, peopleQuery, mes
 import { richContent } from './lib/content.js';
 import { openapi } from './lib/api-openapi.js';
 import { validateTokenBundle } from './lib/token-bundle.js';
+import { maxResponseMiB } from './lib/api-http.js';
 
 const capabilities = { ...apiCapabilities, supported: [...apiCapabilities.supported, 'triage_inbox', 'batch_reply_contexts', 'batch_chat_replies', 'quoted_chat_replies', 'channel_thread_reads', 'chat_mark_read', 'chat_mark_unread'],
   unsupported: apiCapabilities.unsupported.filter(name => !['quoted_replies', 'mark_unread'].includes(name)), triage: triageCapabilities };
@@ -53,7 +54,7 @@ function contentInput(input) {
 
 export async function createAdapter(ctx, {
   createSession = (profile, dir, settings) => new MicrosoftTeamsSession(ctx, profile, dir, settings),
-  createAPI = session => new TeamsAPI(session),
+  createAPI = session => new TeamsAPI(session, { maxResponseMiB: maxResponseMiB(ctx.settings?.maxResponseMiB) }),
   createTriage = (api, ledger) => new TeamsTriage(api, ledger),
   createServer = handler => http.createServer(handler),
 } = {}) {
