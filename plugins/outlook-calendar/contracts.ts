@@ -282,7 +282,15 @@ function validTimes(event: any) {
       (t.date && date.toISOString().slice(0, 10) !== t.date)
     )
       return fail("invalid_request");
-    if (!t.date) iana(t.timeZone);
+    if (!t.date) {
+      const civilDate = new Date(t.dateTime.slice(0, 10));
+      if (
+        !Number.isFinite(civilDate.valueOf()) ||
+        civilDate.toISOString().slice(0, 10) !== t.dateTime.slice(0, 10)
+      )
+        return fail("invalid_request");
+      iana(t.timeZone);
+    }
   }
   if (Date.parse(a.date ?? a.dateTime) >= Date.parse(b.date ?? b.dateTime))
     return fail("invalid_request");
