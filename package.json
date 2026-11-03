@@ -16,6 +16,7 @@
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@xmldom/xmldom": "^0.9.12",
+    "ajv": "^8.20.0",
     "esbuild": "^0.28.2",
     "typescript": "^5.9.0",
     "yaml": "^2.7.0"
