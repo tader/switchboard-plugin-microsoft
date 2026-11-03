@@ -7,6 +7,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  actions: write
 concurrency:
   group: release-please
   cancel-in-progress: false
@@ -34,3 +35,10 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      - name: Dispatch required checks for the release PR head
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_PRS: ${{ steps.release.outputs.prs }}
+        run: node scripts/dispatch-release-checks.js
