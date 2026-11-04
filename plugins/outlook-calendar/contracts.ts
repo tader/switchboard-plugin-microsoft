@@ -27,7 +27,7 @@ function segment(value: unknown) {
     typeof value !== "string" ||
     !value ||
     [".", ".."].includes(value) ||
-    /[\\/]/.test(value)
+    value.includes("\\")
   )
     return fail("invalid_request");
   return encodeURIComponent(value);
@@ -168,6 +168,27 @@ function pageArgs(cursor: unknown, bound: unknown): Record<string, string> {
     return fail("invalid_cursor");
   }
 }
+// Microsoft may spell the same collection selector as /calendars/{id} or
+// /calendars('id'). Preserve opaque identifiers, including escaped apostrophes
+// and encoded slashes; only compare the surrounding API path case-insensitively.
+function calendarPathParts(pathname: string): string[] {
+  try {
+    const decoded = decodeURIComponent(pathname);
+    const quoted = decoded.match(
+      /^(.*)\/calendars\('((?:[^']|'')*)'\)\/calendarview$/i,
+    );
+    if (quoted)
+      return [
+        ...quoted[1].split("/"),
+        "calendars",
+        quoted[2].replace(/''/g, "'"),
+        "calendarview",
+      ];
+    return pathname.split("/").map(part => decodeURIComponent(part));
+  } catch {
+    return fail("invalid_provider_response");
+  }
+}
 function nextCursor(
   data: any,
   ctx: ContractContext,
@@ -181,8 +202,8 @@ function nextCursor(
   if (!link) return undefined;
   const url = new URL(link, root(ctx.connection));
   const expected = new URL(root(ctx.connection) + path);
-  const actualParts = decodeURIComponent(url.pathname).split("/");
-  const expectedParts = decodeURIComponent(expected.pathname).split("/");
+  const actualParts = calendarPathParts(url.pathname);
+  const expectedParts = calendarPathParts(expected.pathname);
   const idIndex = path.toLowerCase().endsWith("/calendarview")
     ? expectedParts.length - 2
     : -1;
