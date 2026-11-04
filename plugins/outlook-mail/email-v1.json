@@ -1,0 +1,986 @@
+{
+  "version": 1,
+  "operations": {
+    "email.mailboxes.list": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/mailbox"
+            },
+            "maxItems": 1000
+          },
+          "nextCursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "coverage": {
+            "$ref": "#/definitions/coverage"
+          }
+        },
+        "required": [
+          "items",
+          "coverage"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "email.messages.list": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "collectionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "isRead": {
+            "type": "boolean"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/message"
+            },
+            "maxItems": 1000
+          },
+          "nextCursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "coverage": {
+            "$ref": "#/definitions/coverage"
+          }
+        },
+        "required": [
+          "items",
+          "coverage"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "email.messages.get": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/message"
+      }
+    },
+    "email.messages.update": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "ifVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "changes": {
+            "type": "object",
+            "properties": {
+              "isRead": {
+                "type": "boolean"
+              },
+              "isFlagged": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "minProperties": 1
+          }
+        },
+        "required": [
+          "id",
+          "changes"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/receipt"
+      }
+    },
+    "email.messages.move": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "ifVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "destinationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "sourceCollectionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "id",
+          "destinationId"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/receipt"
+      }
+    },
+    "email.messages.trash": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "ifVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/receipt"
+      }
+    },
+    "email.messages.send": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 998,
+            "pattern": "^[^\\r\\n]*$"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/address"
+            },
+            "maxItems": 100,
+            "minItems": 1
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/address"
+            },
+            "maxItems": 100
+          },
+          "bcc": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/address"
+            },
+            "maxItems": 100
+          },
+          "text": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 524288
+          },
+          "html": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 524288
+          }
+        },
+        "required": [
+          "subject",
+          "to"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "text"
+            ]
+          },
+          {
+            "required": [
+              "html"
+            ]
+          }
+        ]
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/receipt"
+      }
+    },
+    "email.messages.reply": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "text": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 524288
+          },
+          "html": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 524288
+          },
+          "replyAll": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "text"
+            ]
+          },
+          {
+            "required": [
+              "html"
+            ]
+          }
+        ]
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/receipt"
+      }
+    },
+    "email.messages.forward": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/address"
+            },
+            "maxItems": 100,
+            "minItems": 1
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/address"
+            },
+            "maxItems": 100
+          },
+          "bcc": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/address"
+            },
+            "maxItems": 100
+          },
+          "text": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 524288
+          },
+          "html": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 524288
+          }
+        },
+        "required": [
+          "id",
+          "to"
+        ],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "text"
+            ]
+          },
+          {
+            "required": [
+              "html"
+            ]
+          }
+        ]
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/receipt"
+      }
+    },
+    "email.drafts.list": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/draft"
+            },
+            "maxItems": 1000
+          },
+          "nextCursor": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 65536
+          },
+          "coverage": {
+            "$ref": "#/definitions/coverage"
+          }
+        },
+        "required": [
+          "items",
+          "coverage"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "email.drafts.get": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/draft"
+      }
+    },
+    "email.drafts.create": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "subject": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 998,
+            "pattern": "^[^\\r\\n]*$"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/address"
+            },
+            "maxItems": 100
+          },
+          "cc": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/address"
+            },
+            "maxItems": 100
+          },
+          "bcc": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/address"
+            },
+            "maxItems": 100
+          },
+          "text": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 524288
+          },
+          "html": {
+            "type": "string",
+            "minLength": 0,
+            "maxLength": 524288
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": [
+              "text"
+            ]
+          },
+          {
+            "required": [
+              "html"
+            ]
+          }
+        ]
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/receipt"
+      }
+    },
+    "email.drafts.update": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "ifVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "changes": {
+            "type": "object",
+            "properties": {
+              "subject": {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 998,
+                "pattern": "^[^\\r\\n]*$"
+              },
+              "to": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/address"
+                },
+                "maxItems": 100
+              },
+              "cc": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/address"
+                },
+                "maxItems": 100
+              },
+              "bcc": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/address"
+                },
+                "maxItems": 100
+              },
+              "text": {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 524288
+              },
+              "html": {
+                "type": "string",
+                "minLength": 0,
+                "maxLength": 524288
+              }
+            },
+            "required": [],
+            "additionalProperties": false,
+            "minProperties": 1
+          }
+        },
+        "required": [
+          "id",
+          "changes"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/receipt"
+      }
+    },
+    "email.drafts.delete": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "ifVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/receipt"
+      }
+    },
+    "email.drafts.send": {
+      "input": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "ifVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      },
+      "output": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$ref": "#/definitions/receipt"
+      }
+    }
+  },
+  "definitions": {
+    "address": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 320,
+          "pattern": "^[^\\s<>@]+@[^\\s<>@]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 320,
+          "pattern": "^[^\\r\\n]*$"
+        }
+      },
+      "required": [
+        "address"
+      ],
+      "additionalProperties": false
+    },
+    "mailbox": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "name": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 1024
+        },
+        "kind": {
+          "enum": [
+            "folder",
+            "label",
+            "virtual"
+          ]
+        },
+        "role": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "inbox",
+            "sent",
+            "drafts",
+            "trash",
+            "archive",
+            "spam",
+            null
+          ]
+        },
+        "canWrite": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "message": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 998,
+          "pattern": "^[^\\r\\n]*$"
+        },
+        "from": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/address"
+          },
+          "maxItems": 100
+        },
+        "to": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/address"
+          },
+          "maxItems": 100
+        },
+        "cc": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/address"
+          },
+          "maxItems": 100
+        },
+        "bcc": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/address"
+          },
+          "maxItems": 100
+        },
+        "replyTo": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/address"
+          },
+          "maxItems": 100
+        },
+        "collectionIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "maxItems": 1000
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 524288
+        },
+        "html": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 524288
+        },
+        "isRead": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "isFlagged": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "draft": {
+          "type": "boolean"
+        },
+        "receivedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "sentAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 64
+        },
+        "threadId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "contentState": {
+          "enum": [
+            "available",
+            "unavailable",
+            "restricted",
+            "deleted"
+          ]
+        },
+        "hasAttachments": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "subject",
+        "from",
+        "to",
+        "collectionIds",
+        "text",
+        "isRead",
+        "draft",
+        "contentState"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "contentState": {
+                "enum": [
+                  "unavailable",
+                  "restricted",
+                  "deleted"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "text": {
+                "type": "null"
+              },
+              "html": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "draft": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "message": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/message"
+            },
+            {
+              "properties": {
+                "draft": {
+                  "const": true
+                }
+              }
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "coverage": {
+      "type": "object",
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": [
+        "complete"
+      ],
+      "additionalProperties": false
+    },
+    "receipt": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "accepted",
+            "rejected",
+            "uncertain"
+          ]
+        },
+        "resourceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
