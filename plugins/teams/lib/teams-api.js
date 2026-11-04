@@ -43,7 +43,10 @@ function arrayProperty(value) {
 }
 export function normalize(raw) {
   const parent = raw.parentMessageId ?? raw.properties?.parentMessageId ?? raw.rootMessageId;
-  return { id: String(raw.id), text: plainText(raw.content, raw.messagetype ?? raw.messageType),
+  const type=raw.messagetype??raw.messageType;
+  const restricted=[raw.isRestricted,raw.isHidden,raw.properties?.isRestricted].some(v=>v===true||v==='true'||v==='True');
+  const unavailable=typeof raw.content!=='string'||type&&!/^(Text|RichText(?:\/.*)?)$/.test(type);
+  return { ...(restricted?{contentState:'restricted'}:unavailable?{contentState:'unavailable'}:{}), id: String(raw.id), text: plainText(raw.content, raw.messagetype ?? raw.messageType),
     author: raw.imdisplayname ?? raw.imDisplayName ?? null, authorId: typeof raw.from === 'string' ? raw.from.split('/contacts/').at(-1) : null,
     time: raw.originalarrivaltime ?? raw.originalArrivalTime ?? raw.composetime ?? raw.composeTime ?? null,
     richText: /html/i.test(raw.messagetype ?? raw.messageType ?? '') ? String(raw.content ?? '') : null,
@@ -594,7 +597,7 @@ export class TeamsAPI {
       const id = result?.OriginalArrivalTime ?? result?.originalarrivaltime ?? result?.id;
       if (id == null) throw new Error();
       return { status: 'accepted_by_api', message: { id: String(id), clientMessageId: prepared.payload.clientmessageid }, ...(prepared.channelReplyGuard ? { channelId: prepared.channelReplyGuard.channelId, parentMessageId: prepared.channelReplyGuard.parentMessageId } : {}), deliveryConfirmed: false };
-    } catch { throw new AdapterError('send_uncertain', 'The send was attempted. Inspect Teams before further action; reuse this idempotency key.', 409); }
+    } catch (error) {const uncertain=new AdapterError('send_uncertain', 'The send was attempted. Inspect Teams before further action; reuse this idempotency key.', 409);if(error.reauthenticationRequired||error.code==='api_unauthorized')uncertain.reauthenticationRequired=true;throw uncertain; }
   }
   async reactions(id, mid) {
     const conversation = await this.resolve(id), { raw } = await this.exactMessage(conversation.id, mid);

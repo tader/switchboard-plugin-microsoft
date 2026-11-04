@@ -83,7 +83,7 @@ async function fixture(t, { forbidBrowser = false, dataDir, peerMessages = false
   t.after(async () => { await instance.dispose(); await fs.rm(directory, { recursive: true, force: true }); });
   const auth = instance.services[0].authMethods.find(method => method.id === 'browser');
   async function connect() {
-    const flow = await auth.connect({ config: { label: 'Test' } });
+    const flow = await auth.connect({ config: { label: 'Test', access:'write' } });
     assert.equal(flow.device.browser, true);
     assert.equal(flow.device.userCode, undefined);
     assert.equal(flow.device.verificationUri, undefined);
@@ -110,7 +110,7 @@ async function fixture(t, { forbidBrowser = false, dataDir, peerMessages = false
 test('v2 import proves refresh credentials, renews expired tokens after restart and supports forced renewal without a browser', async t => {
   const f = await fixture(t, { forbidBrowser: true });
   const portable = { ...signedBundle({ exp: 1 }), renewal: renewal() };
-  const connection = await f.tokenAuth.connect({ config: { tokenBundle: encodeTokenBundle(portable) } });
+  const connection = await f.tokenAuth.connect({ config: { access:'write', tokenBundle: encodeTokenBundle(portable) } });
   assert.equal(connection.credentials.renewal.value, 'fixture-rotated-2');
   const status = (await f.call(connection, '/status')).body;
   assert.equal(status.renewalMethod, 'http_refresh_token'); assert.equal(status.tokenImportRequired, false);
@@ -128,7 +128,7 @@ test('v2 import proves refresh credentials, renews expired tokens after restart 
 
 test('partial HTTP rotation is returned for encrypted persistence while a write is blocked, then recovers after reload', async t => {
   const f = await fixture(t, { forbidBrowser: true });
-  const connection = await f.tokenAuth.connect({ config: { tokenBundle: encodeTokenBundle({ ...signedBundle(), renewal: renewal() }) } });
+  const connection = await f.tokenAuth.connect({ config: { access:'write', tokenBundle: encodeTokenBundle({ ...signedBundle(), renewal: renewal() }) } });
   connection.credentials.tokens.skype.expiresAt = 1; f.setFailSecondRefresh(true);
   const outgoing = await f.authorize(connection, `/chats/unused/messages`, 'POST');
   assert.equal(connection.credentials.renewal.value, 'fixture-rotated-3', 'host receives rotation even when second resource fails');
@@ -144,7 +144,7 @@ test('partial HTTP rotation is returned for encrypted persistence while a write 
 
 test('revoked refresh token requires reimport; transient errors remain retryable and never open a browser', async t => {
   const f = await fixture(t, { forbidBrowser: true });
-  const connection = await f.tokenAuth.connect({ config: { tokenBundle: encodeTokenBundle({ ...signedBundle(), renewal: renewal() }) } });
+  const connection = await f.tokenAuth.connect({ config: { access:'write', tokenBundle: encodeTokenBundle({ ...signedBundle(), renewal: renewal() }) } });
   connection.credentials.tokens.skype.expiresAt = 1; f.setRefreshFailure('temporarily_unavailable');
   await assert.rejects(f.call(connection, '/chats'), { code: 'refresh_exchange_rejected' });
   assert.equal((await f.call(connection, '/status')).body.tokenImportRequired, false);
@@ -159,9 +159,9 @@ test('revoked refresh token requires reimport; transient errors remain retryable
 test('invalid v2 reimport leaves the existing connection usable', async t => {
   const f = await fixture(t, { forbidBrowser: true });
   const raw = encodeTokenBundle({ ...signedBundle(), renewal: renewal() });
-  const connection = await f.tokenAuth.connect({ config: { tokenBundle: raw } });
+  const connection = await f.tokenAuth.connect({ config: { access:'write', tokenBundle: raw } });
   const old = f.sessions.get(connection.credentials.profile); f.setRefreshFailure('invalid_grant');
-  await assert.rejects(f.tokenAuth.connect({ config: { tokenBundle: raw }, connection }), { code: 'refresh_exchange_rejected' });
+  await assert.rejects(f.tokenAuth.connect({ config: { access:'write', tokenBundle: raw }, connection }), { code: 'refresh_exchange_rejected' });
   assert.equal(old.disposed, false); assert.equal((await f.call(connection, '/chats')).status, 200);
 });
 
@@ -257,7 +257,7 @@ test('API writes preserve duplicate protection, quarantine uncertain sends and v
 
 test('batch token rejection updates status for laptop auth sync without dispatching a reply', async t => {
   const f = await fixture(t, { peerMessages: true, forbidBrowser: true });
-  const connection = await f.tokenAuth.connect({ config: { tokenBundle: encodeTokenBundle(signedBundle()) } });
+  const connection = await f.tokenAuth.connect({ config: { access:'write', tokenBundle: encodeTokenBundle(signedBundle()) } });
   const inbox = (await f.call(connection, '/triage/inbox')).body;
   f.setRejectDirectory(true);
   const result = await f.call(connection, '/triage/replies', 'POST', { replies: [{ target: inbox.items[0].replyTarget, text: 'Fixture reply', idempotencyKey: 'auth-triage-001' }] });
@@ -340,8 +340,8 @@ test('transport redacts remote errors, rejects untrusted regional hosts, and for
 
 test('imported connections read and renew chat tokens without ever creating a browser', async t => {
   const f = await fixture(t, { forbidBrowser: true });
-  const connection = await f.tokenAuth.connect({ config: { label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) } });
-  assert.deepEqual(connection.config, {});
+  const connection = await f.tokenAuth.connect({ config: { access:'write', label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) } });
+  assert.deepEqual(connection.config, {access:'write'});
   assert.equal(f.tokenAuth.fields.find(field => field.key === 'tokenBundle').type, 'secret');
   const listed = await f.call(connection, '/chats'); assert.equal(listed.status, 200);
   const read = await f.call(connection, `/chats/${listed.body.items[0].id}/messages`); assert.equal(read.body.items[0].text, 'Original');
@@ -365,7 +365,7 @@ test('imported connections read and renew chat tokens without ever creating a br
 
 test('re-import replaces cached credentials, preserves the ledger and invalidates old invocations', async t => {
   const f = await fixture(t, { forbidBrowser: true });
-  let connection = await f.tokenAuth.connect({ config: { label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) } });
+  let connection = await f.tokenAuth.connect({ config: { access:'write', label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) } });
   const id = (await f.call(connection, '/chats')).body.items[0].id, input = { text: 'Fixture only', idempotencyKey: 'portable-send' };
   const sent = await f.call(connection, `/chats/${id}/messages`, 'POST', input); assert.equal(sent.status, 200);
   const old = f.sessions.get(connection.credentials.profile), outstanding = await f.authorize(connection, '/status');
@@ -378,7 +378,7 @@ test('re-import replaces cached credentials, preserves the ledger and invalidate
   await assert.rejects(f.tokenAuth.connect({ config: { label: 'Failed', tokenBundle: encodeTokenBundle(signedBundle()) }, connection }), { code: 'api_unauthorized' });
   f.setRejectDirectory(false); assert.equal((await f.call(connection, '/status')).body.ready, true);
   const profile = connection.credentials.profile; connection.credentials.tokens.skype.expiresAt = 1;
-  connection = await f.tokenAuth.connect({ config: { label: 'Central', tokenBundle: encodeTokenBundle(signedBundle({ exp: Math.floor(Date.now() / 1000) + 7200 })) }, connection });
+  connection = await f.tokenAuth.connect({ config: { access:'write', label: 'Central', tokenBundle: encodeTokenBundle(signedBundle({ exp: Math.floor(Date.now() / 1000) + 7200 })) }, connection });
   assert.equal(connection.credentials.profile, profile); assert.equal(old.disposed, true);
   assert.equal((await f.invoke(outstanding)).status, 401);
   assert.equal((await f.call(connection, '/status')).body.ready, true);
@@ -389,7 +389,7 @@ test('re-import replaces cached credentials, preserves the ledger and invalidate
 
 test('persisted imported credentials recover after reload and retain duplicate protection', async t => {
   const first = await fixture(t, { forbidBrowser: true });
-  const connection = await first.tokenAuth.connect({ config: { label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) } });
+  const connection = await first.tokenAuth.connect({ config: { access:'write', label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) } });
   const id = (await first.call(connection, '/chats')).body.items[0].id, input = { text: 'Fixture only', idempotencyKey: 'reload-send' };
   const sent = await first.call(connection, `/chats/${id}/messages`, 'POST', input);
   const saved = JSON.parse(JSON.stringify(connection)); await first.instance.dispose();
@@ -403,14 +403,14 @@ test('persisted imported credentials recover after reload and retain duplicate p
 
 test('rejected access tokens, forced renewal and rejected exchanges require import without browser fallback', async t => {
   const f = await fixture(t, { forbidBrowser: true });
-  let connection = await f.tokenAuth.connect({ config: { label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) } });
+  let connection = await f.tokenAuth.connect({ config: { access:'write', label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) } });
   f.setRejectDirectory(true);
   const rejected = await f.call(connection, '/chats'); assert.equal(rejected.status, 503); assert.equal(rejected.body.error.code, 'token_import_required');
   assert.equal((await f.call(connection, '/status')).body.tokenImportRequired, true);
   f.setRejectDirectory(false); await assert.rejects(f.call(connection, '/chats'), { code: 'token_import_required' });
-  connection = await f.tokenAuth.connect({ config: { label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) }, connection });
+  connection = await f.tokenAuth.connect({ config: { access:'write', label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) }, connection });
   await assert.rejects(f.authorize(connection, '/chats', 'GET', true), { code: 'token_import_required' });
-  connection = await f.tokenAuth.connect({ config: { label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) }, connection });
+  connection = await f.tokenAuth.connect({ config: { access:'write', label: 'Central', tokenBundle: encodeTokenBundle(signedBundle()) }, connection });
   connection.credentials.chatToken.expiresAt = 1; f.setRejectAuthz(true);
   await assert.rejects(f.call(connection, '/chats'), { code: 'token_import_required' });
   assert.equal((await f.call(connection, '/status')).body.tokenImportRequired, true);
@@ -424,7 +424,7 @@ test('browser connections can reconnect and switch authentication methods withou
   let connection = await f.connect();
   const profile = connection.credentials.profile;
   const original = f.sessions.get(profile);
-  connection = await f.tokenAuth.connect({ config: { label: 'Central', tokenBundle: encodeTokenBundle(signedBundle({ oid: profile })) }, connection });
+  connection = await f.tokenAuth.connect({ config: { access:'write', label: 'Central', tokenBundle: encodeTokenBundle(signedBundle({ oid: profile })) }, connection });
   assert.equal(connection.credentials.profile, profile); assert.equal(original.disposed, true);
   assert.equal((await f.call(connection, '/status')).body.authMode, 'tokens');
   const imported = f.sessions.get(profile);
@@ -457,7 +457,7 @@ test('Microsoft proprietary access-token signatures are validated by Teams befor
   const f = await fixture(t, { forbidBrowser: true });
   const bundle = signedBundle();
   for (const service of ['skype', 'chatsvcagg']) bundle.tokens[service].value = proprietaryToken(service);
-  const connection = await f.tokenAuth.connect({ config: { label: 'Central', tokenBundle: encodeTokenBundle(bundle) } });
+  const connection = await f.tokenAuth.connect({ config: { access:'write', label: 'Central', tokenBundle: encodeTokenBundle(bundle) } });
   assert.equal((await f.call(connection, '/chats')).status, 200);
   assert.ok(!f.requests.some(request => request.url.pathname.endsWith('/discovery/keys')), 'clients do not verify Microsoft access-token signatures');
   for (const service of ['skype', 'chatsvcagg']) {
@@ -490,7 +490,7 @@ test('read-state HTTP route validates input and exposes independent disabled cap
 
 test('read-state token rejection updates auth status and stops remaining batch items', async t => {
   const f = await fixture(t, { peerMessages: true, forbidBrowser: true, readProtocols: { chat: { read: true } } });
-  const connection = await f.tokenAuth.connect({ config: { tokenBundle: encodeTokenBundle(signedBundle()) } });
+  const connection = await f.tokenAuth.connect({ config: { access:'write', tokenBundle: encodeTokenBundle(signedBundle()) } });
   const target = (await f.call(connection, '/triage/inbox')).body.items[0].replyTarget;
   f.setRejectDirectory(true);
   const result = await f.call(connection, '/triage/read-state', 'POST', { updates: [
@@ -524,7 +524,7 @@ test('flat unread uses the ordinary horizon after a cleared bookmark and preserv
 
 test('restored parity routes acquire search tokens before host persistence and retain recipient/quote duplicate protection', async t => {
   const f = await fixture(t, { parity: true, forbidBrowser: true });
-  const connection = await f.tokenAuth.connect({ config: { tokenBundle: encodeTokenBundle({ ...signedBundle(), renewal: renewal() }) } });
+  const connection = await f.tokenAuth.connect({ config: { access:'write', tokenBundle: encodeTokenBundle({ ...signedBundle(), renewal: renewal() }) } });
   const people = await f.call(connection, '/people?query=Peer');
   assert.equal(people.body.items[0].email, 'peer@example.com');
   assert.ok(connection.credentials.tokens.substrate);

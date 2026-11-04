@@ -20,6 +20,11 @@ For unread triage, prefer `getTeamsTriageInbox`, `getTeamsReplyContexts` and `re
 
 The service ID remains `teams-web`, and the existing browser authentication method remains `browser`, so existing Switchboard connections can be reconnected in place. The previous DOM adapter is retained in `legacy-index.js` for regression testing; production does not invoke it.
 
+## Shared Messaging contract
+
+See [Messaging v1](docs/messaging-contract.md) for common operations, access settings,
+activity-controlled reconciliation, authentication pauses and integration tests.
+
 ## Install locally
 
 From this checkout:

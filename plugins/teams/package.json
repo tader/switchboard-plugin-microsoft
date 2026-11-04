@@ -16,6 +16,7 @@
     "install:local": "node scripts/install-local.js",
     "auth:export": "node scripts/auth-export.js",
     "auth:sync": "node scripts/auth-sync.js",
-    "check:auth-refresh": "node scripts/auth-refresh-check.js"
+    "check:auth-refresh": "node scripts/auth-refresh-check.js",
+    "integration:contracts": "node scripts/contract-integration.js"
   }
 }
