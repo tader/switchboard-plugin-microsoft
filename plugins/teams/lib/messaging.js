@@ -143,7 +143,8 @@ export function createMessaging(root) {
     return data;
   }
   const available = (c) =>
-    ["browser", "tokens"].includes(c.methodId) &&
+    (["browser", "tokens"].includes(c.methodId) ||
+      (c.methodId === "authentication-source" && c.credentials?.authMode === "microsoft")) &&
     c.credentials?.profile &&
     c.credentials?.identity
       ? Object.keys(operations).filter(
@@ -163,67 +164,37 @@ export function createMessaging(root) {
     };
   }
   op("messaging.conversations.list", async (input, ctx) => {
-    const limit = input.limit ?? 50,
-      bind = [
-        ctx.connection.id,
-        ctx.connection.credentials.identity.tenant,
-        ctx.connection.credentials.identity.oid,
-        "conversations",
-        limit,
-      ];
-    const cursor = input.cursor
-      ? await cursors.decode(bind, input.cursor)
-      : undefined;
-    const raw = await request(ctx, "/chats/discovery", { limit, cursor });
-    let channels = { items: [] };
-    if (!cursor) {
-      try {
-        channels = await request(ctx, "/channels");
-      } catch (e) {
-        if (!["permission_denied", "not_found"].includes(e.code)) throw e;
-      }
+    const limit = input.limit ?? 50;
+    const bind = [ctx.connection.id, ctx.connection.credentials.identity.tenant,
+      ctx.connection.credentials.identity.oid, "conversations-v2", limit];
+    const state = input.cursor ? JSON.parse(await cursors.decode(bind, input.cursor)) : null;
+    // Keep the provider's page size stable: its native cursor is bound to it.
+    const raw = state?.chatsDone ? {items:[]} : await request(ctx, "/chats/discovery", {
+      limit:Math.ceil(limit/2), cursor:state?.chat,
+    });
+    let channels = {items:[]}, unavailable = false;
+    try { channels = await request(ctx, "/channels"); }
+    catch(e){if(!["permission_denied","not_found"].includes(e.code))throw e;unavailable=true;}
+    const directory = [...new Map(channels.items.map(c=>[c.id,c])).values()]
+      .sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0);
+    const hash = createHash("sha256").update(JSON.stringify(directory.map(c=>c.id))).digest("hex");
+    // Restart instead of silently skipping/repeating channels if membership changes.
+    if(state && state.channelHash!==hash)throw fail("invalid_cursor",409);
+    const items=[];
+    for(const item of raw.items){
+      try{
+        const c=await request(ctx,"/contract/conversations/"+encodeURIComponent(item.id));
+        items.push({id:c.id,title:c.title,kind:c.kind,unread:c.unreadCount,updatedAt:date(c.time)});
+      }catch(e){if(!["permission_denied","not_found"].includes(e.code))throw e;unavailable=true;}
     }
-    const items = [];
-    let unavailable = false;
-    for (const item of raw.items) {
-      try {
-        const c = await request(
-          ctx,
-          "/contract/conversations/" + encodeURIComponent(item.id),
-        );
-        items.push({
-          id: c.id,
-          title: c.title,
-          kind: c.kind,
-          unread: c.unreadCount,
-          updatedAt: date(c.time),
-        });
-      } catch (e) {
-        if (!["permission_denied", "not_found"].includes(e.code)) throw e;
-        unavailable = true;
-      }
-    }
-    items.push(
-      ...channels.items.map((c) => ({
-        id: c.id,
-        title: c.title || "Teams channel",
-        kind: "channel",
-        unread: null,
-        updatedAt: null,
-      })),
-    );
-    return {
-      items,
-      ...(raw.nextCursor
-        ? { nextCursor: await cursors.encode(bind, raw.nextCursor) }
-        : {}),
-      coverage: {
-        complete: false,
-        reason: unavailable
-          ? "available_snapshot_some_resources_unavailable"
-          : "available_chat_and_channel_snapshot_only",
-      },
-    };
+    const offset=state?.channelOffset??0;
+    const selected=directory.slice(offset,offset+Math.max(0,limit-items.length));
+    items.push(...selected.map(c=>({id:c.id,title:c.title||"Teams channel",kind:"channel",unread:null,updatedAt:null})));
+    const next={chat:raw.nextCursor??null,chatsDone:state?.chatsDone||!raw.nextCursor,
+      channelOffset:offset+selected.length,channelHash:hash};
+    return {items,...(!next.chatsDone||next.channelOffset<directory.length?
+      {nextCursor:await cursors.encode(bind,JSON.stringify(next))}:{}),
+      coverage:{complete:false,reason:unavailable?"available_snapshot_some_resources_unavailable":"available_chat_and_channel_snapshot_only"}};
   });
   op("messaging.conversations.get", async (input, ctx) => {
     decode(input.id);

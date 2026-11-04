@@ -24,7 +24,7 @@ const { createUser, createToken } = await load("server/users.ts"),
     "server/contracts/service.ts",
   );
 const cleanup = [],
-  f = await fixture({ after: (fn) => cleanup.push(fn) });
+  f = await fixture({ after: (fn) => cleanup.push(fn) }, "authentication-source");
 (await load("server/contracts/model.ts")).validateDefinition(
   f.service.contracts,
 );
@@ -54,6 +54,17 @@ const base = "http://127.0.0.1:" + server.address().port,
   user = createUser("fixture", "admin"),
   id = "teams-fixture",
   ro = "teams-readonly";
+// Exercise the real credential-consumer boundary too: cached shared sessions
+// still require a selected, owned authentication provider in the core catalogue.
+plugins.services.set("fixture-authentication", {
+ pluginId:"fixture-authentication",
+ service:{id:"fixture-authentication",name:"Fixture authentication",authMethods:[{
+  id:"fixture",name:"Fixture",fields:[],authorize:async()=>{},
+  credentialProvider:{format:"microsoft/web-session/v1",provide:async()=>{throw Error("Unexpected export: fixture uses cached session");}},
+ }]},
+});
+database.run("INSERT INTO connections(id,user_id,service_id,method_id,name,config_enc,credentials_enc,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+ "source-fixture",user.id,"fixture-authentication","fixture","source-fixture",encrypt({}),encrypt({}),"ok",Date.now(),Date.now());
 for (const [key, access] of [
   [id, "write"],
   [ro, "read"],
@@ -63,9 +74,9 @@ for (const [key, access] of [
     key,
     user.id,
     "teams-web",
-    "tokens",
+    f.connection.methodId,
     key,
-    encrypt({ access }),
+    encrypt({ access, authenticationSource: "source-fixture" }),
     encrypt(f.connection.credentials),
     "ok",
     Date.now(),
@@ -97,6 +108,9 @@ try {
   const descriptor = await (
     await request(`/connections/${id}/contracts/v1`)
   ).json();
+  assert.equal(descriptor.operations.length, 5);
+  const discovery = await (await request("/contracts/v1/connections?category=messaging")).json();
+  assert.equal(discovery.connections[0].id, id);
   assert.deepEqual(descriptor.changes, { native: false, reconciliation: true });
   assert.equal((await request(`/connections/${ro}/contracts/v1`)).status, 403);
   assert.equal(
@@ -112,7 +126,7 @@ try {
     403,
   );
   const list = await (await call("messaging.conversations.list", {})).json();
-  assert.equal(list.items.length, 2);
+  assert.equal(list.items?.length, 2, JSON.stringify(list));
   assert.equal(list.coverage.complete, false);
   const history = await (
     await call("messaging.messages.list", { conversationId: chatId })

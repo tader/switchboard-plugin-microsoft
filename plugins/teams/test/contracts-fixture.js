@@ -11,10 +11,11 @@ export const oid = "11111111-1111-4111-8111-111111111111",
   channel = "19:channel@thread.tacv2",
   chatId = encodeConversation("chat", thread),
   channelId = encodeConversation("channel", channel);
-export async function fixture(t) {
+export async function fixture(t, methodId = "tokens") {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "teams-contract-"));
   const requests = [],
     posts = [];
+  let channelCount = 1;
   let expired = false,
     sendFailure = false,
     forbidden = false,
@@ -30,7 +31,7 @@ export async function fixture(t) {
       skype: { value: "PRIVATE-SKYPE" },
       chatsvcagg: { value: "PRIVATE-CSA" },
     },
-    authMode: "tokens",
+    authMode: methodId === "authentication-source" ? "microsoft" : methodId,
   };
   const root = {
     id: "100",
@@ -55,7 +56,7 @@ export async function fixture(t) {
         chats: [{ id: thread, title: "Chat", isOneOnOne: true, members: [] }],
         teams: [
           {
-            channels: [{ id: channel, displayName: "Channel", isMember: true }],
+            channels: Array.from({length:channelCount},(_,n)=>({id:n?channel+"-"+n:channel,displayName:"Channel "+n,isMember:true})),
           },
         ],
       });
@@ -158,7 +159,7 @@ export async function fixture(t) {
   const service = adapter.services[0],
     connection = {
       id: "fixture-connection",
-      methodId: "tokens",
+      methodId,
       serviceId: "teams-web",
       credentials,
       config: { access: "write" },
@@ -175,7 +176,7 @@ export async function fixture(t) {
         body: input.body,
       };
       await service.authMethods
-        .find((m) => m.id === "tokens")
+        .find((m) => m.id === conn.methodId)
         .authorize(req, conn);
       return fetch(req.url, {
         method: req.method,
@@ -196,5 +197,6 @@ export async function fixture(t) {
     failSend: (v) => (sendFailure = v),
     deny: (v) => (forbidden = v),
     rate: (v) => (rate = v),
+    setChannelCount: n => {channelCount=n;},
   };
 }

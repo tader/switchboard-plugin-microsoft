@@ -167,3 +167,54 @@ test("read-only guards include raw writes; auth expiry is terminal and resource 
     (e) => e.code === "rate_limited" && e.retryAfterMs === 123000,
   );
 });
+
+for (const method of ["browser", "tokens", "authentication-source"]) {
+ test(`Messaging discovery and requests preserve access with ${method}`, async t => {
+  const f=await fixture(t,method), contract=f.service.contracts;
+  assert.equal(contract.available(f.connection).length,5);
+  const list=await call(f,"messaging.conversations.list",{});
+  assert.equal(list.items[0].kind,"direct");
+  const history=await call(f,"messaging.messages.list",{conversationId:chatId});
+  assert.equal(history.items[0].text,"Root");
+  const sent=await call(f,"messaging.messages.send",{conversationId:chatId,text:"source fixture"});
+  assert.equal(sent.status,"accepted");assert.equal(f.posts.length,1);
+  const read={...f.connection,config:{...f.connection.config,access:"read"}};
+  assert.equal(contract.available(read).length,4);
+  await assert.rejects(call(f,"messaging.messages.send",{conversationId:chatId,text:"blocked"},f.invocation(read)),{code:"permission_denied"});
+  await assert.rejects(f.invocation(read).request({method:"POST",url:"/chats/"+encodeURIComponent(chatId)+"/messages",body:"{}"}),{code:"permission_denied"});
+  assert.equal(f.posts.length,1);
+  f.expire(true);const before=f.requests.length;
+  await assert.rejects(contract.collect({},f.invocation()),e=>e.code==="authentication_required"&&e.reauthenticationRequired);
+  assert.equal(f.requests.length,before);
+ });
+}
+test("shared authentication requires its own credential mode and existing profile/identity", async t => {
+ const f=await fixture(t,"authentication-source"), available=f.service.contracts.available;
+ assert.deepEqual(available({...f.connection,credentials:{...f.connection.credentials,authMode:"tokens"}}),[]);
+ assert.deepEqual(available({...f.connection,credentials:{...f.connection.credentials,profile:null}}),[]);
+ assert.deepEqual(available({...f.connection,credentials:{...f.connection.credentials,identity:null}}),[]);
+ assert.deepEqual(available({...f.connection,methodId:"unknown"}),[]);
+});
+
+test("mixed chat/channel discovery stays bounded and pages every channel exactly once",async t=>{
+ const f=await fixture(t,"authentication-source");f.setChannelCount(130);
+ let cursor;const ids=[];let pages=0;
+ do{const page=await call(f,"messaging.conversations.list",{limit:20,...(cursor?{cursor}:{})});
+ assert.ok(page.items.length<=20);ids.push(...page.items.map(c=>c.id));cursor=page.nextCursor;pages++;assert.ok(pages<10);
+ }while(cursor);
+ assert.equal(ids.length,131);assert.equal(new Set(ids).size,131);assert.ok(ids.includes(chatId));
+});
+test("discovery cursors remain bound to query/account and reject changed channel membership",async t=>{
+ const f=await fixture(t,"authentication-source");f.setChannelCount(5);
+ const page=await call(f,"messaging.conversations.list",{limit:2});
+ await assert.rejects(call(f,"messaging.conversations.list",{limit:3,cursor:page.nextCursor}),{code:"invalid_cursor"});
+ const other={...f.connection,id:"other-account"};
+ await assert.rejects(call(f,"messaging.conversations.list",{limit:2,cursor:page.nextCursor},f.invocation(other)),{code:"invalid_cursor"});
+ // The provider directory cache may last 30s; use another adapter with the same
+ // signing key to exercise a refreshed snapshot without sleeping in this test.
+ const {createMessaging}=await import("../lib/messaging.js");
+ const contract=createMessaging(f.directory);
+ const ctx=f.invocation();const original=ctx.request;
+ ctx.request=async req=>req.url==="/channels"?Response.json({items:[]}):original(req);
+ await assert.rejects(contract.operations["messaging.conversations.list"].invoke({limit:2,cursor:page.nextCursor},ctx),{code:"invalid_cursor"});
+});
