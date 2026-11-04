@@ -156,6 +156,14 @@ export class TeamsAPI {
   }
   discoveredChat(raw) {
     const type = raw.threadProperties?.threadType;
+    // Notes-to-self is an account-private conversation, not a group thread.
+    // Recognize only its exact provider ID and type; other system streams stay hidden.
+    if (raw.id === '48:notes' && type === 'streamofnotes') return {
+      id: raw.id, title: 'Notes to self', isOneOnOne: true,
+      discoverySource: 'regional_self_notes',
+      lastMessage: { originalArrivalTime: raw.lastMessage?.originalArrivalTime ?? raw.properties?.lastimreceivedtime ?? null },
+      isMessagingDisabled: raw.isMessagingDisabled, isDisabled: raw.isDisabled,
+    };
     if (!['chat', 'meeting'].includes(type) || !/^19:[^/]+@(?:thread\.v2|unq\.gbl\.spaces)$/.test(raw.id)) return null;
     const props = raw.properties ?? {};
     const marker = value => typeof value === 'string' && /^\d+;\d+;\d+$/.test(value) && Number.isSafeInteger(Number(value.split(';')[0])) ? Number(value.split(';')[0]) : null;
@@ -372,6 +380,14 @@ export class TeamsAPI {
     catch { throw new AdapterError('invalid_conversation', 'Use a conversation ID returned by the Teams listing.', 400); }
     // Old DOM IDs with an exact threadId can migrate after server membership lookup.
     if (typeof value.threadId !== 'string' || !value.threadId || value.threadId.length > 1024 || /[\u0000-\u001f/]/.test(value.threadId) || value.kind && value.kind !== kind || value.parentMessageId) throw new AdapterError('invalid_conversation', 'Refresh the conversation ID with listTeamsChats or listTeamsChannels.', 400);
+    if (kind === 'chat' && value.threadId === '48:notes') {
+      // Revalidate in the authenticated ME scope. A caller cannot substitute a
+      // different account or turn an arbitrary system stream into a destination.
+      const raw = await this.request('messages', 'users/ME/conversations/48%3Anotes?view=msnp24Equivalent');
+      const own = this.discoveredChat(raw);
+      if (raw.id !== '48:notes' || own?.discoverySource !== 'regional_self_notes') throw new AdapterError('conversation_unavailable', 'Self conversation was not returned for this account.', 404);
+      return own;
+    }
     const data = await this.directory();
     let match = kind === 'chat' ? data.chats.find(chat => chat.id === value.threadId) : data.teams.flatMap(team => team.channels || []).find(channel => channel.id === value.threadId);
     if (!match && kind === 'chat' && !value.recipientEmail) {

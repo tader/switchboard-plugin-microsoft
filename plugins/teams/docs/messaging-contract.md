@@ -55,3 +55,9 @@ Conversation discovery shares each page between regional chats and joined channe
 never exceeding the requested limit. Continuations bind the account, connection and
 page size; a changed channel membership snapshot requires restarting discovery.
 Provider chat cursors retain a stable native page size across mixed pages.
+
+The account-private Notes to self conversation is included when Teams returns its
+exact `48:notes` / `streamofnotes` identity. Reads and send preparation revalidate
+it through the authenticated `ME` endpoint; callers cannot supply another user's
+notes stream. Other system streams are excluded. No conversation is created as a
+side effect of discovery.

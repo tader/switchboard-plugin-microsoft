@@ -16,6 +16,7 @@ export async function fixture(t, methodId = "tokens") {
   const requests = [],
     posts = [];
   let channelCount = 1;
+  let includeSelfNotes = false;
   let expired = false,
     sendFailure = false,
     forbidden = false,
@@ -60,9 +61,11 @@ export async function fixture(t, methodId = "tokens") {
           },
         ],
       });
+    if (p.endsWith("/users/ME/conversations/48:notes"))return Response.json({id:"48:notes",threadProperties:{threadType:"streamofnotes"}});
     if (p.endsWith("/users/ME/conversations"))
       return Response.json({
         conversations: [
+          ...(includeSelfNotes?[{id:"48:notes",threadProperties:{threadType:"streamofnotes"}}]:[]),
           {
             id: thread,
             threadProperties: { threadType: "chat", topic: "Chat" },
@@ -198,5 +201,6 @@ export async function fixture(t, methodId = "tokens") {
     deny: (v) => (forbidden = v),
     rate: (v) => (rate = v),
     setChannelCount: n => {channelCount=n;},
+    includeSelfNotes: () => {includeSelfNotes=true;},
   };
 }

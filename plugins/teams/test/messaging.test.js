@@ -218,3 +218,14 @@ test("discovery cursors remain bound to query/account and reject changed channel
  ctx.request=async req=>req.url==="/channels"?Response.json({items:[]}):original(req);
  await assert.rejects(contract.operations["messaging.conversations.list"].invoke({limit:2,cursor:page.nextCursor},ctx),{code:"invalid_cursor"});
 });
+
+test("common discovery, history and durable sends support the account-private self conversation",async t=>{
+ const f=await fixture(t,"authentication-source");f.includeSelfNotes();
+ const {encodeConversation}=await import("../lib/teams-api.js");const id=encodeConversation("chat","48:notes");
+ const list=await call(f,"messaging.conversations.list",{});
+ assert.equal(list.items.find(c=>c.id===id).title,"Notes to self");
+ assert.equal(list.items.find(c=>c.id===id).kind,"direct");
+ const history=await call(f,"messaging.messages.list",{conversationId:id});assert.equal(history.items[0].isOwn,true);
+ const input={conversationId:id,text:"Self fixture"};const result=await call(f,"messaging.messages.send",input);
+ assert.equal(result.status,"accepted");assert.deepEqual(await call(f,"messaging.messages.send",input),result);assert.equal(f.posts.length,1);
+});
