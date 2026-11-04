@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-mail-v1.2.2...outlook-mail-v1.3.0) (2026-11-04)
+
+
+### Features
+
+* add common Calendar and Outlook Email contracts ([#25](https://github.com/tader/switchboard-plugin-microsoft/issues/25)) ([8b4e36b](https://github.com/tader/switchboard-plugin-microsoft/commit/8b4e36ba8afa5751eee3b07fc074d8b26ac21ff2))
+
 ## [1.2.2](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-mail-v1.2.1...outlook-mail-v1.2.2) (2026-10-20)
 
 
