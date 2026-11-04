@@ -398,3 +398,35 @@ test("timed entries reject calendar-date rollover before provider dispatch", asy
   );
   assert.equal(f.requests.length, 0);
 });
+
+
+test("Microsoft OData calendar selectors preserve opaque IDs and bounded pagination on both backends", async () => {
+  for (const web of [false, true]) {
+    const calendarId = "ca'l+/=";
+    const origin = web ? "https://outlook.office.com" : "https://graph.microsoft.com";
+    const prefix = web ? "/api/v2.0" : "/v1.0";
+    const selector = encodeURIComponent(calendarId.replaceAll("'", "''"));
+    let link = `${origin}${prefix}/me/Calendars('${selector}')/CalendarView?$skip=100&startDateTime=changed`;
+    const f = fixture(() => json({ value: [], "@odata.nextLink": link }), web);
+    const args = {calendarId, timeMin:"2026-11-01T00:00:00Z",timeMax:"2026-12-01T00:00:00Z"};
+    const first = await call("calendar.events.list",args,f.ctx);
+    assert.equal(first.coverage.complete,false);
+    link=undefined;
+    await call("calendar.events.list",{...args,cursor:first.nextCursor},f.ctx);
+    const next=new URL(f.requests.at(-1).url);
+    assert.equal(decodeURIComponent(next.pathname.split("/").at(-2)),calendarId);
+    assert.equal(next.searchParams.get("$skip"),"100");
+    assert.equal(next.searchParams.get("startDateTime"),args.timeMin);
+    assert.equal(next.searchParams.get("endDateTime"),args.timeMax);
+    for(const bad of [
+      `${origin}${prefix}/me/calendars('other')/calendarView?$skip=2`,
+      `${origin}${prefix}/users/other/calendars('${selector}')/calendarView?$skip=2`,
+      `https://other.example${prefix}/me/calendars('${selector}')/calendarView?$skip=2`,
+      `${origin}${prefix}/me/calendars('${selector}')/events?$skip=2`,
+      `${origin}${prefix}/me/calendars('broken'quote')/calendarView?$skip=2`,
+    ]) {
+      link=bad;
+      await assert.rejects(()=>call("calendar.events.list",args,f.ctx),{code:"invalid_provider_response"});
+    }
+  }
+});
