@@ -68,7 +68,8 @@ test('Teams offers the same shared authentication picker as other Microsoft prod
   const method = methods[0];
   const outlook = createConsumerAuth(f.ctx, { id: 'outlook-mail', scopes: [] });
   assert.equal(method.name, outlook.name);
-  assert.deepEqual(method.fields, outlook.fields);
+  assert.deepEqual(method.fields.filter(f=>f.key!=='access'), outlook.fields);
+  assert(method.fields.some(f=>f.key==='access'));
   assert.deepEqual(method.credentialConsumer, outlook.credentialConsumer);
   assert.equal(method.unavailable, undefined);
   const profile = randomUUID();
@@ -76,7 +77,12 @@ test('Teams offers the same shared authentication picker as other Microsoft prod
   const connected = await method.connect({ config, connection: { credentials: { profile, authMode: 'browser' } } });
   assert.equal(connected.credentials.profile, profile);
   assert.equal(connected.credentials.authMode, 'microsoft');
-  assert.deepEqual(connected.config, config);
+  const contracts=adapter.services[0].contracts;
+  const commonConnection={...connected,methodId:'authentication-source'};
+  assert.equal(contracts.available(commonConnection).length,4,'read-only Microsoft Authentication connection must be discoverable');
+  assert.equal(contracts.available({...commonConnection,config:{...connected.config,access:'write'}}).length,5);
+  assert.equal(contracts.watch,undefined,'capabilities must not claim native push');
+  assert.deepEqual(connected.config, {...config,access:'read'});
   assert.equal(connected.account.id, `${tenant}:${oid}`);
   assert.equal(f.supplied[0].ref, config.authenticationSource);
   assert.equal(directoryChecks, 1);

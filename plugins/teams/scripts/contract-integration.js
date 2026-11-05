@@ -33,7 +33,7 @@ plugins.services.set("teams-web", {
   service: f.service,
 });
 assert.equal(
-  fs.readFileSync("lib/messaging-v1.json", "utf8"),
+  fs.readFileSync(new URL("../lib/messaging-v1.json", import.meta.url), "utf8"),
   fs.readFileSync(
     path.join(root, "server/contracts/messaging-v1.json"),
     "utf8",

@@ -33,13 +33,20 @@ Expired/revoked credentials require reconnecting the same connection; repeating 
 refresh does not bypass the pause. A resource-specific forbidden response does not
 pause the entire account. Provider retry-after values are preserved.
 
-Validation:
+Validation, from the repository root:
 
 ```sh
 npm ci
+npm run check
 npm test
-SWITCHBOARD_ROOT=/path/to/compatible/core npm run integration:contracts
+SWITCHBOARD_ROOT=/path/to/compatible/core npm run integration:messaging
 ```
+
+`lib/messaging-v1.json` must be byte-identical to the core's
+`server/contracts/messaging-v1.json`; the integration script asserts this.
+The shared Microsoft Authentication source path is covered in
+`test/teams-source.test.js` against this repository's
+`plugins/microsoft-authentication`, not a separately pinned checkout.
 
 Tests use offline provider fixtures and real local HTTP/SSE paths. They cover
 read-only scope, schema parity, restricted content, replay and uncertain sends,
