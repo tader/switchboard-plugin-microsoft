@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-mail-v1.3.0...outlook-mail-v1.4.0) (2026-11-05)
+
+
+### Features
+
+* **outlook-mail:** emit mailbox roles from well-known folders ([#29](https://github.com/tader/switchboard-plugin-microsoft/issues/29)) ([6c85421](https://github.com/tader/switchboard-plugin-microsoft/commit/6c85421c8ebf8d421575a579be639dc7091c3cdc))
+
 ## [1.3.0](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-mail-v1.2.2...outlook-mail-v1.3.0) (2026-11-04)
 
 
