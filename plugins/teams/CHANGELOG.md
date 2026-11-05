@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.3](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.13.2...teams-v0.13.3) (2026-11-05)
+
+
+### Bug Fixes
+
+* **teams:** display readable chat titles and sender names ([469811a](https://github.com/tader/switchboard-plugin-microsoft/commit/469811a14418d569eec9be9de9ece2c533633663))
+* **teams:** resolve chat titles and message sender names ([dc67e74](https://github.com/tader/switchboard-plugin-microsoft/commit/dc67e74b830e8e97a98945b3071f5bd28acb547a))
+
 ## [0.13.2](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.12.5...teams-v0.13.2) (2026-11-05)
 
 
