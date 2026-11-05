@@ -19,7 +19,7 @@ function fixture({pages=[{conversations:[chat()]}],partial=true,roster=true,erro
 }
 const link=page=>`${origin}/v1/users/8:orgid:self/conversations?page=${page}`;
 test('regional paging follows empty filtered pages, deduplicates overlaps and replays scoped cursors',async()=>{
- const f=fixture({pages:[{conversations:[{id:'48:notes',threadProperties:{threadType:'streamofnotes'}}],_metadata:{backwardLink:link(1)}},{conversations:[chat()],_metadata:{backwardLink:link(2)}},{conversations:[chat(),chat('19:last@thread.v2')]}]});
+ const f=fixture({pages:[{conversations:[{id:'48:mentions',threadProperties:{threadType:'streamofmentions'}}],_metadata:{backwardLink:link(1)}},{conversations:[chat()],_metadata:{backwardLink:link(2)}},{conversations:[chat(),chat('19:last@thread.v2')]}]});
  const first=await f.api.discoverChats({limit:2});assert.equal(first.items.length,0);assert.equal(first.hasMore,true);assert.equal(first.excludedConversations,1);
  const second=await f.api.discoverChats({limit:2,cursor:first.nextCursor});assert.equal(second.items.length,1);const count=f.calls.length;
  assert.deepEqual(await f.api.discoverChats({limit:2,cursor:first.nextCursor}),second);assert.equal(f.calls.length,count);

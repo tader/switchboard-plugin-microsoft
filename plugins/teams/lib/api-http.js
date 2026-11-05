@@ -21,7 +21,7 @@ export async function requestJSON(url, { maxResponseMiB: limit = DEFAULT_MAX_RES
     if (response.status === 401) throw new AdapterError('api_unauthorized', 'Teams rejected the token. Renew authentication.', 401);
     if (response.status === 403) throw new AdapterError('api_forbidden', 'Teams denied this operation.', 403);
     if (response.status === 404) throw new AdapterError('api_not_found', 'Teams could not find this resource.', 404);
-    if (response.status === 429) throw new AdapterError('api_rate_limited', 'Teams rate limit reached. Try again later.', 429);
+    if (response.status === 429) throw Object.assign(new AdapterError('api_rate_limited', 'Teams rate limit reached. Try again later.', 429),{retryAfterMs:Math.min(86400000,Math.max(1000,(Number(response.headers.get('retry-after'))||60)*1000))});
     throw new AdapterError('api_response_failed', `Teams API returned HTTP ${response.status}.`, 502);
   }
   if (!response.body) return null;

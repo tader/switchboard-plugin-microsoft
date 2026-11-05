@@ -37,3 +37,6 @@ jobs:
       - run: npm run integration:email
         env:
           SWITCHBOARD_ROOT: ${{ github.workspace }}/switchboard-contract-core
+      - run: npm run integration:messaging
+        env:
+          SWITCHBOARD_ROOT: ${{ github.workspace }}/switchboard-contract-core
