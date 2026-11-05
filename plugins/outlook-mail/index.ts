@@ -40,7 +40,7 @@ export default function setup(ctx: PluginContext) {
           ],
           scopes: (c) => SCOPES[c.access] ?? SCOPES["full"],
         }),
-        contracts: createContracts(ctx.dataDir),
+        contracts: createContracts(ctx.dataDir, { log: ctx.log }),
       },
     ],
   };
