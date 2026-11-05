@@ -331,6 +331,43 @@ export function createContracts(dataDir: string): ContractDefinition {
       ...(next || reason ? { reason: reason ?? "more_pages" } : {}),
     },
   });
+  // Graph/Outlook well-known folder names are locale independent; never infer roles from display names.
+  const wellKnown: Record<string, string> = {
+    inbox: "inbox",
+    sentitems: "sent",
+    drafts: "drafts",
+    deleteditems: "trash",
+    archive: "archive",
+    junkemail: "spam",
+  };
+  // v1.0 folders carry no wellKnownName, so resolve each well-known folder ID once per listing.
+  const resolveRoles = async (ctx: ContractContext) => {
+    const roles: Record<string, string> = {};
+    const found = await Promise.all(
+      Object.entries(wellKnown).map(async ([name, role]) => {
+        try {
+          const r = await request(
+            ctx,
+            "/me/mailFolders/" +
+              name +
+              query({ $select: field(ctx.connection, "id") }),
+          );
+          return typeof r.id === "string" && r.id ? [r.id, role] : undefined;
+        } catch (error: any) {
+          // A mailbox without e.g. an archive folder (or a backend without that name) has no such role.
+          if (
+            ["not_found", "permission_denied", "invalid_request"].includes(
+              error.code,
+            )
+          )
+            return undefined;
+          throw error;
+        }
+      }),
+    );
+    for (const pair of found) if (pair) roles[pair[0]] = pair[1];
+    return roles;
+  };
   op("mailboxes.list", async (input, ctx) => {
     const binding = bind(ctx, "folders", input),
       cursor = await cursors.decode(binding, input.cursor);
@@ -340,6 +377,7 @@ export function createContracts(dataDir: string): ContractDefinition {
       seen: string[];
       bounded: boolean;
       partial?: string;
+      roles?: Record<string, string>;
     } = cursor
       ? JSON.parse(cursor)
       : {
@@ -361,6 +399,8 @@ export function createContracts(dataDir: string): ContractDefinition {
       state.queue.length > 256
     )
       return fail("invalid_cursor", 409);
+    state.roles ??= await resolveRoles(ctx);
+    const roles = state.roles;
     const route = state.route.split("?")[0];
     let data: any;
     try {
@@ -378,6 +418,12 @@ export function createContracts(dataDir: string): ContractDefinition {
       id: r.id,
       name: r.displayName ?? r.id,
       kind: "folder",
+      role:
+        (Object.hasOwn(roles, r.id) ? roles[r.id] : undefined) ??
+        (typeof r.wellKnownName === "string" &&
+        Object.hasOwn(wellKnown, r.wellKnownName.toLowerCase())
+          ? wellKnown[r.wellKnownName.toLowerCase()]
+          : null),
       canWrite: grants(ctx.connection).write,
     }));
     for (const r of data.value ?? [])

@@ -22,6 +22,15 @@ siblings. Directory traversal is bounded at 256 queued/1,024 visited parents and
 cursors bind connection, account, backend, filters and page size. Provider next
 links must retain the exact audience, API prefix and requested collection path.
 
+Folder `role` comes only from well-known folder names, never from localized display
+names: `inbox`, `sentitems` (sent), `drafts`, `deleteditems` (trash), `archive` and
+`junkemail` (spam). Graph v1.0 folders carry no `wellKnownName`, so the first page
+of a listing reads `/me/mailFolders/{name}?$select=id` once per name and keeps the
+resulting IDs in the signed cursor; a `wellKnownName` returned by the provider is
+honoured as well. A missing folder (for example no archive folder yet) has no role.
+Other lookup failures fail the listing rather than silently dropping roles. Other
+folders report `role: null`. Moving to the archive-role folder is an ordinary move.
+
 Message projections preserve text or HTML bodies, recipients, folder membership,
 read/flag/draft state and thread identity. Unknown state stays null. Missing bodies
 are unavailable; body previews are not substituted as complete content. Consumers
@@ -61,6 +70,7 @@ not send real email, expand scopes or register cloud subscriptions.
 - [Message patches preserve omitted properties](https://learn.microsoft.com/en-us/graph/api/message-update?view=graph-rest-1.0)
 - [Reply action](https://learn.microsoft.com/en-us/graph/api/message-reply?view=graph-rest-1.0)
 - [Forward action](https://learn.microsoft.com/en-us/graph/api/message-forward?view=graph-rest-1.0)
+- [Well-known folder names](https://learn.microsoft.com/en-us/graph/api/resources/mailfolder?view=graph-rest-1.0)
 - [Child folder traversal and hidden folders](https://learn.microsoft.com/en-us/graph/api/mailfolder-list-childfolders?view=graph-rest-1.0)
 
 The private compatibility routes and PascalCase wire format follow the existing

@@ -66,6 +66,10 @@ const mail = (id = "m", draft = false) => ({
   conversationId: "thread",
   hasAttachments: true,
 });
+// Role resolution reads each well-known folder by name; directory assertions ignore those lookups.
+const WELL_KNOWN =
+  /\/mailFolders\/(inbox|sentitems|drafts|deleteditems|archive|junkemail)\?/i;
+const directory = (requests) => requests.filter((r) => !WELL_KNOWN.test(r.url));
 const pascal = (value) =>
   Array.isArray(value)
     ? value.map(pascal)
@@ -211,7 +215,7 @@ test("folder discovery walks child pages and detects provider cycles", async (t)
   assert.equal(second.items[1].id, "nested");
   assert.equal(second.nextCursor, undefined);
   assert.equal(second.coverage.complete, true);
-  assert.ok(f.requests[1].url.includes("/parent/childFolders"));
+  assert.ok(directory(f.requests)[1].url.includes("/parent/childFolders"));
 });
 test("native Outlook pagination and OData filters use its audience and PascalCase", async (t) => {
   const f = await fixture(
@@ -404,7 +408,9 @@ test("one inaccessible child folder does not hide siblings and reports partial c
   );
   const first = await f.call("mailboxes.list", { limit: 2 });
   assert.equal(
-    new URL(f.requests[0].url).searchParams.get("includeHiddenFolders"),
+    new URL(directory(f.requests)[0].url).searchParams.get(
+      "includeHiddenFolders",
+    ),
     "true",
   );
   const second = await f.call("mailboxes.list", {
@@ -421,4 +427,94 @@ test("one inaccessible child folder does not hide siblings and reports partial c
   assert.equal(third.items[0].id, "nested");
   assert.equal(third.coverage.complete, false);
   assert.equal(third.coverage.reason, "some_folders_unavailable");
+});
+
+for (const native of [false, true])
+  test(`${native ? "Outlook" : "Graph"} folder roles come from well-known folder names, never display names`, async (t) => {
+    const ids = {
+      inbox: "id-inbox",
+      sentitems: "id-sent",
+      drafts: "id-drafts",
+      deleteditems: "id-deleted",
+      archive: "id-archive",
+      junkemail: "id-junk",
+    };
+    const f = await fixture(
+      t,
+      (r) => {
+        const u = new URL(r.url);
+        const name = /\/mailFolders\/([^/]+)$/i.exec(u.pathname)?.[1];
+        if (name && !u.pathname.toLowerCase().endsWith("/childfolders")) {
+          assert.equal(u.searchParams.get("$select"), native ? "Id" : "id");
+          const id = ids[name.toLowerCase()];
+          const body = { id };
+          return id ? json(native ? pascal(body) : body) : json({}, 404);
+        }
+        const value = [
+          { id: "id-inbox", displayName: "Postvak IN" },
+          { id: "id-archive", displayName: "Archief" },
+          // A user folder named "Archive" must not get the archive role.
+          { id: "user-archive", displayName: "Archive" },
+          { id: "id-sent", displayName: "Verzonden items" },
+          { id: "id-drafts", displayName: "Concepten" },
+          { id: "id-deleted", displayName: "Verwijderde items" },
+          { id: "id-junk", displayName: "Ongewenste e-mail" },
+          { id: "beta", displayName: "Beta", wellKnownName: "archive" },
+        ];
+        return json({ value: native ? pascal(value) : value });
+      },
+      native,
+    );
+    const result = await f.call("mailboxes.list", {});
+    assert.deepEqual(
+      Object.fromEntries(result.items.map((m) => [m.id, m.role])),
+      {
+        "id-inbox": "inbox",
+        "id-archive": "archive",
+        "user-archive": null,
+        "id-sent": "sent",
+        "id-drafts": "drafts",
+        "id-deleted": "trash",
+        "id-junk": "spam",
+        // Beta-style responses that carry wellKnownName are honoured too.
+        beta: "archive",
+      },
+    );
+    assert.equal(result.items[1].kind, "folder");
+    assert.equal(result.items[1].canWrite, true);
+    assert.equal(f.requests.filter((r) => WELL_KNOWN.test(r.url)).length, 6);
+  });
+
+test("folder roles survive pagination without re-resolving and a missing archive folder is no role", async (t) => {
+  const f = await fixture(t, (r) => {
+    const u = new URL(r.url);
+    if (WELL_KNOWN.test(r.url))
+      return u.pathname.endsWith("/archive")
+        ? json({}, 404)
+        : json({ id: "id-" + u.pathname.split("/").pop() });
+    return u.pathname.endsWith("/childFolders")
+      ? json({ value: [{ id: "id-sentitems", displayName: "Sent" }] })
+      : json({
+          value: [
+            { id: "id-inbox", displayName: "Inbox", childFolderCount: 1 },
+          ],
+        });
+  });
+  const first = await f.call("mailboxes.list", { limit: 1 });
+  assert.equal(first.items[0].role, "inbox");
+  const second = await f.call("mailboxes.list", {
+    limit: 1,
+    cursor: first.nextCursor,
+  });
+  assert.equal(second.items[0].role, "sent");
+  assert.equal(f.requests.filter((r) => WELL_KNOWN.test(r.url)).length, 6);
+});
+
+test("a role lookup outage fails the listing instead of hiding roles", async (t) => {
+  const f = await fixture(t, (r) =>
+    WELL_KNOWN.test(r.url) ? json({}, 503) : json({ value: [] }),
+  );
+  await assert.rejects(() => f.call("mailboxes.list", {}), {
+    code: "source_unavailable",
+  });
 });
