@@ -191,7 +191,7 @@ export class TeamsAPI {
     for (const raw of page.raw) {
       if (seen.has(raw.id)) continue;
       seen.add(raw.id); const chat = this.discoveredChat(raw);
-      if (chat) items.push({ id: encode('chat', chat.id), title: chat.title, unread: typeof chat.isRead === 'boolean' ? !chat.isRead : null, hidden: chat.hidden, time: chat.lastMessage.originalArrivalTime });
+      if (chat) items.push({ id: encode('chat', chat.id), title: await this.conversationTitle(chat), unread: typeof chat.isRead === 'boolean' ? !chat.isRead : null, hidden: chat.hidden, time: chat.lastMessage.originalArrivalTime });
       else excluded++;
     }
     // Normalize links before comparing so relative/absolute aliases cannot loop.
@@ -239,6 +239,54 @@ export class TeamsAPI {
     if (conversation.discoverySource !== 'regional_conversations') return;
     const roster = await this.request('messages', `threads/${encodeURIComponent(conversation.id)}/members`);
     if (!Array.isArray(roster?.members) || !roster.members.some(member => member.id === this.selfMri())) throw new AdapterError('conversation_unavailable', 'Current chat membership was not verified.', 404);
+  }
+  async participantName(mri) {
+    if (typeof mri !== 'string' || !/^8:orgid:[a-f0-9-]{36}$/i.test(mri)) return null;
+    const account = this.account(), key = `${account}:${mri}`;
+    this.participantNames ??= new Map();
+    const cached = this.participantNames.get(key);
+    if (cached && cached.expires > Date.now()) return cached.value;
+    if (this.participantNames.size >= 4096) this.participantNames.delete(this.participantNames.keys().next().value);
+    const value = (async () => {
+      this.nameWaiters ??= []; this.nameActive ??= 0;
+      if (this.nameActive >= 4) await new Promise(resolve => this.nameWaiters.push(resolve));
+      else this.nameActive++;
+      try {
+        const result = await this.request('mt', `users/${encodeURIComponent(mri)}/?throwIfNotFound=false&enableGuest=true&includeIBBarredUsers=true&skypeTeamsInfo=true`);
+        if (this.account() !== account) return null;
+        const person = result?.value;
+        return person?.mri === mri && typeof person.displayName === 'string' ? person.displayName.trim() || null : null;
+      } catch (error) {
+        if (['api_unauthorized', 'api_rate_limited'].includes(error.code) || error.name === 'AbortError') throw error;
+        return null;
+      } finally {
+        const next = this.nameWaiters.shift(); if (next) next(); else this.nameActive--;
+      }
+    })();
+    const entry = { value, expires: Infinity }; this.participantNames.set(key, entry);
+    try { const name = await value; entry.expires = Date.now() + (name ? 3600_000 : 300_000); return name; }
+    catch (error) { this.participantNames.delete(key); throw error; }
+  }
+  async conversationTitle(chat) {
+    const title = chat.title || chat.displayName || chat.threadProperties?.topic;
+    const identityTitle = typeof title === 'string' && title.split(',').every(v => /^8:orgid:[a-f0-9-]{36}$/i.test(v.trim()));
+    if (title && !identityTitle && !['Teams', 'Teams chat'].includes(title)) return title;
+    let members = chat.members;
+    if (!Array.isArray(members) || !members.length) {
+      const ids = identityTitle ? title.split(',').map(v => ({ mri: v.trim() })) : [];
+      if (ids.length) members = ids;
+      else {
+        try {
+          const roster = await this.request('messages', `threads/${encodeURIComponent(chat.id)}/members`);
+          if (Array.isArray(roster?.members) && roster.members.some(m => m.id === this.selfMri())) members = roster.members.map(m => ({ ...m, mri: m.id }));
+        } catch (error) {
+          if (['api_unauthorized', 'api_rate_limited'].includes(error.code) || error.name === 'AbortError') throw error;
+        }
+      }
+    }
+    const peers = (members || []).filter(m => m.mri && m.mri !== this.selfMri());
+    const names = await Promise.all(peers.map(async m => (typeof m.friendlyName === 'string' && m.friendlyName.trim() && m.friendlyName !== m.mri ? m.friendlyName : null) || await this.participantName(m.mri) || m.mri));
+    return names.join(', ') || title || 'Teams chat';
   }
   selfMri() { return `8:orgid:${this.credentials.identity.oid}`; }
   async profile(email = this.credentials.identity.email) {
@@ -361,12 +409,12 @@ export class TeamsAPI {
   }
   async chats(unreadOnly = false) {
     const data = await this.directory(true, undefined, true);
-    const items = data.chats.filter(chat => !chat.isConversationDeleted && (!unreadOnly || chat.isRead === false)).map(chat => ({
-      id: encode('chat', chat.id), title: chat.title || chat.members?.filter(member => member.mri !== this.selfMri()).map(member => member.friendlyName || member.mri).join(', ') || 'Teams chat',
+    const items = await Promise.all(data.chats.filter(chat => !chat.isConversationDeleted && (!unreadOnly || chat.isRead === false)).map(async chat => ({
+      id: encode('chat', chat.id), title: await this.conversationTitle(chat),
       unread: typeof chat.isRead === 'boolean' ? !chat.isRead : null, hidden: Boolean(chat.hidden),
       preview: chat.lastMessage ? plainText(chat.lastMessage.content, chat.lastMessage.messageType) : null,
       time: chat.lastMessage?.originalArrivalTime ?? null,
-    }));
+    })));
     const partial = Boolean(data.metadata?.isPartialData || data.metadata?.hasMoreChats || data.metadata?.forwardSyncToken);
     return { items, discoveryComplete: data.discovery ? data.discovery.complete : !partial, truncated: data.discovery ? data.discovery.truncated : partial, ...(data.discovery ? { discovery: data.discovery } : {}), completeAccount: false, coverage: data.discovery?.coverage ?? 'api_conversation_snapshot', mayMarkRead: false };
   }

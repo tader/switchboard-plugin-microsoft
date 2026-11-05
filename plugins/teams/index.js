@@ -82,7 +82,7 @@ export async function createAdapter(ctx, {
         if(!Array.isArray(roster?.members)||!roster.members.some(m=>m.id===api.selfMri()))throw new AdapterError('conversation_unavailable','Current membership was not verified.',404);
         type=new Set(roster.members.map(m=>m.id)).size<=2?'direct':'group';}
     }
-    return {id,title:raw.title||raw.displayName||raw.threadProperties?.topic||'Teams',kind:type,unreadCount:Number.isSafeInteger(raw.unreadCount)?raw.unreadCount:null,time:raw.lastMessage?.originalArrivalTime??null};
+    return {id,title:await api.conversationTitle(raw),kind:type,unreadCount:Number.isSafeInteger(raw.unreadCount)?raw.unreadCount:null,time:raw.lastMessage?.originalArrivalTime??null};
   };
   const prune = setInterval(() => {
     const now = Date.now();

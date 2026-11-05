@@ -69,6 +69,7 @@ export function project(raw, conversationId, self) {
     conversationId,
     text: state === "available" ? m.text : null,
     authorId: m.authorId ?? null,
+    authorDisplayName: m.author?.trim().slice(0, 512) || null,
     createdAt: date(m.time),
     isOwn: m.authorId && self ? m.authorId === self : null,
     contentState: state,
