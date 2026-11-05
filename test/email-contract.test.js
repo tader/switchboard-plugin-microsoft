@@ -11,11 +11,11 @@ const json = (body, status = 200, headers = {}) =>
     status,
     headers,
   });
-async function fixture(t, respond, native = false) {
+async function fixture(t, respond, native = false, options = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "outlook-email-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const requests = [],
-    contracts = createContracts(root);
+    contracts = createContracts(root, options);
   const ctx = {
     connection: {
       id: "c",
@@ -66,9 +66,19 @@ const mail = (id = "m", draft = false) => ({
   conversationId: "thread",
   hasAttachments: true,
 });
-// Role resolution reads each well-known folder by name; directory assertions ignore those lookups.
+// Role resolution batches (Graph) or reads (Outlook REST) each well-known folder; directory assertions ignore those lookups.
 const WELL_KNOWN =
-  /\/mailFolders\/(inbox|sentitems|drafts|deleteditems|archive|junkemail)\?/i;
+  /\/\$batch$|\/mailFolders\/(inbox|sentitems|drafts|deleteditems|archive|junkemail)\?/i;
+const isBatch = (r) => new URL(r.url).pathname.endsWith("/$batch");
+// Answers a Graph JSON batch of well-known folder reads; `lookup(name)` gives [status, body].
+const batch = (r, lookup) =>
+  json({
+    responses: JSON.parse(r.body).requests.map((q) => {
+      const name = /\/mailFolders\/([^?]+)/.exec(q.url)[1];
+      const [status, body] = lookup(name, q);
+      return { id: q.id, status, body };
+    }),
+  });
 const directory = (requests) => requests.filter((r) => !WELL_KNOWN.test(r.url));
 const pascal = (value) =>
   Array.isArray(value)
@@ -429,26 +439,37 @@ test("one inaccessible child folder does not hide siblings and reports partial c
   assert.equal(third.coverage.reason, "some_folders_unavailable");
 });
 
+const ROLE_IDS = {
+  inbox: "id-inbox",
+  sentitems: "id-sent",
+  drafts: "id-drafts",
+  deleteditems: "id-deleted",
+  archive: "id-archive",
+  junkemail: "id-junk",
+};
 for (const native of [false, true])
   test(`${native ? "Outlook" : "Graph"} folder roles come from well-known folder names, never display names`, async (t) => {
-    const ids = {
-      inbox: "id-inbox",
-      sentitems: "id-sent",
-      drafts: "id-drafts",
-      deleteditems: "id-deleted",
-      archive: "id-archive",
-      junkemail: "id-junk",
-    };
     const f = await fixture(
       t,
       (r) => {
         const u = new URL(r.url);
+        if (isBatch(r)) {
+          assert.equal(native, false);
+          assert.equal(r.method, "POST");
+          assert.equal(u.href, "https://graph.microsoft.com/v1.0/$batch");
+          return batch(r, (name, q) => {
+            assert.equal(q.method, "GET");
+            assert.equal(new URL(q.url, u).searchParams.get("$select"), "id");
+            const id = ROLE_IDS[name];
+            return id ? [200, { id }] : [404, { error: {} }];
+          });
+        }
         const name = /\/mailFolders\/([^/]+)$/i.exec(u.pathname)?.[1];
         if (name && !u.pathname.toLowerCase().endsWith("/childfolders")) {
-          assert.equal(u.searchParams.get("$select"), native ? "Id" : "id");
-          const id = ids[name.toLowerCase()];
-          const body = { id };
-          return id ? json(native ? pascal(body) : body) : json({}, 404);
+          assert.equal(native, true);
+          assert.equal(u.searchParams.get("$select"), "Id");
+          const id = ROLE_IDS[name.toLowerCase()];
+          return id ? json(pascal({ id })) : json({}, 404);
         }
         const value = [
           { id: "id-inbox", displayName: "Postvak IN" },
@@ -482,17 +503,20 @@ for (const native of [false, true])
     );
     assert.equal(result.items[1].kind, "folder");
     assert.equal(result.items[1].canWrite, true);
-    assert.equal(f.requests.filter((r) => WELL_KNOWN.test(r.url)).length, 6);
+    // Graph: one batch request; Outlook REST: one read per well-known folder.
+    assert.equal(
+      f.requests.filter((r) => WELL_KNOWN.test(r.url)).length,
+      native ? 6 : 1,
+    );
   });
 
-test("folder roles survive pagination without re-resolving and a missing archive folder is no role", async (t) => {
+test("folder roles are cached per connection across pages and listings, and a missing archive folder is no role", async (t) => {
   const f = await fixture(t, (r) => {
-    const u = new URL(r.url);
-    if (WELL_KNOWN.test(r.url))
-      return u.pathname.endsWith("/archive")
-        ? json({}, 404)
-        : json({ id: "id-" + u.pathname.split("/").pop() });
-    return u.pathname.endsWith("/childFolders")
+    if (isBatch(r))
+      return batch(r, (name) =>
+        name === "archive" ? [404, {}] : [200, { id: "id-" + name }],
+      );
+    return new URL(r.url).pathname.endsWith("/childFolders")
       ? json({ value: [{ id: "id-sentitems", displayName: "Sent" }] })
       : json({
           value: [
@@ -502,17 +526,148 @@ test("folder roles survive pagination without re-resolving and a missing archive
   });
   const first = await f.call("mailboxes.list", { limit: 1 });
   assert.equal(first.items[0].role, "inbox");
+  // The cursor no longer carries the role map.
   const second = await f.call("mailboxes.list", {
     limit: 1,
     cursor: first.nextCursor,
   });
   assert.equal(second.items[0].role, "sent");
-  assert.equal(f.requests.filter((r) => WELL_KNOWN.test(r.url)).length, 6);
+  const again = await f.call("mailboxes.list", { limit: 1 });
+  assert.equal(again.items[0].role, "inbox");
+  assert.equal(f.requests.filter(isBatch).length, 1);
 });
 
-test("a role lookup outage fails the listing instead of hiding roles", async (t) => {
+test("a complete role map expires after its TTL and is refreshed without blocking", async (t) => {
+  let clock = 1000,
+    archiveId = "old-archive";
+  const f = await fixture(
+    t,
+    (r) =>
+      isBatch(r)
+        ? batch(r, (name) =>
+            name === "archive" ? [200, { id: archiveId }] : [404, {}],
+          )
+        : json({ value: [{ id: "new-archive" }, { id: "old-archive" }] }),
+    false,
+    { now: () => clock, roleTtlMs: 10000 },
+  );
+  const roleOf = (page, id) => page.items.find((m) => m.id === id).role;
+  assert.equal(
+    roleOf(await f.call("mailboxes.list"), "old-archive"),
+    "archive",
+  );
+  clock += 9999;
+  await f.call("mailboxes.list");
+  assert.equal(f.requests.filter(isBatch).length, 1);
+  clock += 2;
+  archiveId = "new-archive";
+  // Expired: the previous map is served while the refresh runs.
+  const stale = await f.call("mailboxes.list");
+  assert.equal(roleOf(stale, "old-archive"), "archive");
+  assert.equal(f.requests.filter(isBatch).length, 2);
+  const fresh = await f.call("mailboxes.list");
+  assert.equal(roleOf(fresh, "new-archive"), "archive");
+  assert.equal(roleOf(fresh, "old-archive"), null);
+});
+
+for (const failure of [
+  ["an outage", () => json({}, 503)],
+  ["a network error", () => Promise.reject(new TypeError("fetch failed"))],
+  ["a throttled sub-request", null],
+])
+  test(`role lookup failure (${failure[0]}) never fails the listing and is cached only briefly`, async (t) => {
+    let clock = 0;
+    const warnings = [];
+    const f = await fixture(
+      t,
+      (r) =>
+        isBatch(r)
+          ? failure[1]
+            ? failure[1]()
+            : batch(r, (name) =>
+                name === "inbox" ? [200, { id: "id-inbox" }] : [429, {}],
+              )
+          : json({ value: [{ id: "id-inbox", displayName: "Inbox" }] }),
+      false,
+      {
+        now: () => clock,
+        roleFailureTtlMs: 120000,
+        log: { warn: (...a) => warnings.push(a) },
+      },
+    );
+    const result = await f.call("mailboxes.list");
+    assert.equal(result.items[0].role, failure[1] ? null : "inbox");
+    assert.equal(result.coverage.complete, true);
+    if (failure[1]) assert.equal(warnings.length, 1);
+    clock += 119999;
+    await f.call("mailboxes.list");
+    assert.equal(f.requests.filter(isBatch).length, 1);
+    clock += 2;
+    await f.call("mailboxes.list");
+    assert.equal(f.requests.filter(isBatch).length, 2);
+  });
+
+for (const native of [false, true])
+  test(`${native ? "Outlook" : "Graph"} hanging role lookups stay within the time budget and keep roles found so far`, async (t) => {
+    const hang = new Promise(() => {});
+    const f = await fixture(
+      t,
+      (r) => {
+        const u = new URL(r.url);
+        if (isBatch(r)) return hang;
+        const name = /\/mailFolders\/([^/]+)$/i.exec(u.pathname)?.[1];
+        if (name && !u.pathname.toLowerCase().endsWith("/childfolders"))
+          return name === "inbox" ? json(pascal({ id: "id-inbox" })) : hang;
+        return json({
+          value: pascal([
+            { id: "id-inbox", displayName: "Inbox" },
+            { id: "id-archive", displayName: "Archive" },
+            { id: "beta", displayName: "Beta", wellKnownName: "archive" },
+          ]),
+        });
+      },
+      native,
+      { roleBudgetMs: 100 },
+    );
+    const started = Date.now();
+    const result = await f.call("mailboxes.list");
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed >= 90 && elapsed < 1000, `took ${elapsed} ms`);
+    assert.deepEqual(
+      result.items.map((m) => m.role),
+      // Graph's single batch hangs entirely; Outlook REST found the inbox before the budget ran out.
+      [native ? "inbox" : null, null, "archive"],
+    );
+    // A lookup that is still running is shared, not repeated.
+    await f.call("mailboxes.list");
+    assert.equal(
+      f.requests.filter((r) => WELL_KNOWN.test(r.url)).length,
+      // Outlook REST: at most 3 reads in flight (inbox answered, then 3 hang).
+      native ? 4 : 1,
+    );
+  });
+
+test("the directory read and the role lookup run concurrently", async (t) => {
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const order = [];
+  const f = await fixture(t, async (r) => {
+    if (isBatch(r)) {
+      order.push("batch");
+      await gate;
+      return batch(r, () => [404, {}]);
+    }
+    order.push("directory");
+    release();
+    return json({ value: [] });
+  });
+  await f.call("mailboxes.list");
+  assert.deepEqual(order, ["batch", "directory"]);
+});
+
+test("a directory read failure still fails the listing", async (t) => {
   const f = await fixture(t, (r) =>
-    WELL_KNOWN.test(r.url) ? json({}, 503) : json({ value: [] }),
+    isBatch(r) ? batch(r, () => [404, {}]) : json({}, 503),
   );
   await assert.rejects(() => f.call("mailboxes.list", {}), {
     code: "source_unavailable",

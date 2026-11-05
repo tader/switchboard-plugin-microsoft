@@ -24,11 +24,16 @@ links must retain the exact audience, API prefix and requested collection path.
 
 Folder `role` comes only from well-known folder names, never from localized display
 names: `inbox`, `sentitems` (sent), `drafts`, `deleteditems` (trash), `archive` and
-`junkemail` (spam). Graph v1.0 folders carry no `wellKnownName`, so the first page
-of a listing reads `/me/mailFolders/{name}?$select=id` once per name and keeps the
-resulting IDs in the signed cursor; a `wellKnownName` returned by the provider is
-honoured as well. A missing folder (for example no archive folder yet) has no role.
-Other lookup failures fail the listing rather than silently dropping roles. Other
+`junkemail` (spam). Graph v1.0 folders carry no `wellKnownName`, so the folder IDs
+are resolved with one JSON batch (`POST /$batch` of `/me/mailFolders/{name}?$select=id`);
+the compatibility backend reads them with at most three requests in flight. Roles are
+best effort and never slow down or fail a listing: resolution runs alongside the
+directory read, a listing waits at most 5 s for it and then continues with the roles
+found so far (others `null`), and lookup errors are only logged. The role map is
+cached in memory per connection for 6 hours (failed or incomplete lookups for 2
+minutes), so later pages and listings make no lookups; an expired map is served
+while it refreshes. A `wellKnownName` returned by the provider is honoured as well.
+A missing folder (for example no archive folder yet) has no role. Other
 folders report `role: null`. Moving to the archive-role folder is an ordinary move.
 
 Message projections preserve text or HTML bodies, recipients, folder membership,
@@ -70,6 +75,7 @@ not send real email, expand scopes or register cloud subscriptions.
 - [Message patches preserve omitted properties](https://learn.microsoft.com/en-us/graph/api/message-update?view=graph-rest-1.0)
 - [Reply action](https://learn.microsoft.com/en-us/graph/api/message-reply?view=graph-rest-1.0)
 - [Forward action](https://learn.microsoft.com/en-us/graph/api/message-forward?view=graph-rest-1.0)
+- [JSON batching](https://learn.microsoft.com/en-us/graph/json-batching)
 - [Well-known folder names](https://learn.microsoft.com/en-us/graph/api/resources/mailfolder?view=graph-rest-1.0)
 - [Child folder traversal and hidden folders](https://learn.microsoft.com/en-us/graph/api/mailfolder-list-childfolders?view=graph-rest-1.0)
 

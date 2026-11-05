@@ -6,6 +6,7 @@ import type {
   ContractContext,
   ContractDefinition,
   EmailMessage,
+  Logger,
 } from "./types/api.d.ts";
 const GRAPH = "https://graph.microsoft.com/v1.0",
   OUTLOOK = "https://outlook.office.com/api/v2.0";
@@ -208,7 +209,20 @@ function message(input: Record<string, any>) {
     };
   return result;
 }
-export function createContracts(dataDir: string): ContractDefinition {
+export interface ContractOptions {
+  log?: Pick<Logger, "warn">;
+  /** Total time a folder listing waits for role resolution. */
+  roleBudgetMs?: number;
+  /** How long a complete role map stays cached per connection. */
+  roleTtlMs?: number;
+  /** How long a failed or incomplete role map stays cached. */
+  roleFailureTtlMs?: number;
+  now?: () => number;
+}
+export function createContracts(
+  dataDir: string,
+  options: ContractOptions = {},
+): ContractDefinition {
   const cursors = new Cursors(dataDir),
     operations: ContractDefinition["operations"] = {};
   const available = (c: Connection) =>
@@ -340,33 +354,125 @@ export function createContracts(dataDir: string): ContractDefinition {
     archive: "archive",
     junkemail: "spam",
   };
-  // v1.0 folders carry no wellKnownName, so resolve each well-known folder ID once per listing.
-  const resolveRoles = async (ctx: ContractContext) => {
-    const roles: Record<string, string> = {};
-    const found = await Promise.all(
-      Object.entries(wellKnown).map(async ([name, role]) => {
+  // v1.0 folders carry no wellKnownName, so resolve the well-known folder IDs once and cache them.
+  // Roles are best effort: they must never slow down or fail the folder listing itself.
+  const roleBudgetMs = options.roleBudgetMs ?? 5000,
+    roleTtlMs = options.roleTtlMs ?? 6 * 3600000,
+    roleFailureTtlMs = options.roleFailureTtlMs ?? 120000,
+    now = options.now ?? Date.now;
+  type RoleEntry = {
+    /** Map served while no lookup is running (or the previous one during a refresh). */
+    roles: Record<string, string>;
+    /** Roles found so far by the running lookup. */
+    found: Record<string, string>;
+    until: number;
+    started: number;
+    pending?: Promise<Record<string, string>>;
+  };
+  const roleCache = new Map<string, RoleEntry>();
+  // Provider answers meaning "no such folder" (no role); anything else is transient and cached briefly.
+  const absent = ["not_found", "permission_denied", "invalid_request"];
+  const statusAbsent = (status: number) => [400, 403, 404].includes(status);
+  const lookupRoles = async (
+    ctx: ContractContext,
+    found: Record<string, string>,
+  ) => {
+    const names = Object.keys(wellKnown);
+    let settled = 0;
+    const select = query({ $select: field(ctx.connection, "id") });
+    if (!web(ctx.connection)) {
+      // One Graph JSON batch instead of one request per folder (also stays under mailbox concurrency limits).
+      const r = await request(ctx, "/$batch", "POST", {
+        requests: names.map((name, i) => ({
+          id: String(i),
+          method: "GET",
+          url: "/me/mailFolders/" + name + select,
+        })),
+      });
+      for (const item of Array.isArray(r.responses) ? r.responses : []) {
+        const name = names[Number(item?.id)];
+        if (!name) continue;
+        const id = item.body?.id;
+        if (item.status === 200 && typeof id === "string" && id) {
+          found[id] = wellKnown[name];
+          settled++;
+        } else if (statusAbsent(item.status)) settled++;
+      }
+      return settled === names.length;
+    }
+    // The Outlook REST compatibility backend has no JSON batch: bounded parallel reads.
+    const queue = [...names];
+    const worker = async () => {
+      for (let name; (name = queue.shift()); ) {
         try {
-          const r = await request(
-            ctx,
-            "/me/mailFolders/" +
-              name +
-              query({ $select: field(ctx.connection, "id") }),
-          );
-          return typeof r.id === "string" && r.id ? [r.id, role] : undefined;
+          const r = await request(ctx, "/me/mailFolders/" + name + select);
+          if (typeof r.id === "string" && r.id) found[r.id] = wellKnown[name];
+          settled++;
         } catch (error: any) {
-          // A mailbox without e.g. an archive folder (or a backend without that name) has no such role.
-          if (
-            ["not_found", "permission_denied", "invalid_request"].includes(
-              error.code,
-            )
-          )
-            return undefined;
-          throw error;
+          // A mailbox without e.g. an archive folder has no such role.
+          if (absent.includes(error.code)) settled++;
         }
-      }),
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    return settled === names.length;
+  };
+  const resolveRoles = (ctx: ContractContext) => {
+    const key = ctx.connection.id + "\0" + root(ctx.connection);
+    const hit = roleCache.get(key);
+    // A lookup that never settles (hung provider) is abandoned after a minute so it can be retried.
+    if (hit && (hit.pending ? now() - hit.started < 60000 : hit.until > now()))
+      return hit;
+    const stale = hit?.roles ?? {},
+      found: Record<string, string> = {};
+    const entry: RoleEntry = {
+      roles: stale,
+      found,
+      until: 0,
+      started: now(),
+    };
+    const settle = (roles: Record<string, string>, ttl: number) => {
+      // Only the newest lookup may replace the cache entry.
+      if (roleCache.get(key) === entry)
+        roleCache.set(key, {
+          roles,
+          found: roles,
+          until: now() + ttl,
+          started: 0,
+        });
+    };
+    entry.pending = lookupRoles(ctx, found).then(
+      (complete) => {
+        settle(found, complete ? roleTtlMs : roleFailureTtlMs);
+        return found;
+      },
+      (error: any) => {
+        options.log?.warn(
+          "outlook-mail: folder role lookup failed",
+          error?.code ?? error?.message ?? String(error),
+        );
+        const roles = { ...stale, ...found };
+        settle(roles, roleFailureTtlMs);
+        return roles;
+      },
     );
-    for (const pair of found) if (pair) roles[pair[0]] = pair[1];
-    return roles;
+    roleCache.set(key, entry);
+    return entry;
+  };
+  // Waits at most until `deadline` for roles; afterwards the listing continues with what is known.
+  // A refresh of an earlier map does not wait at all: the previous map is served meanwhile.
+  const rolesBy = async (ctx: ContractContext, deadline: number) => {
+    const entry = resolveRoles(ctx);
+    if (!entry.pending || Object.keys(entry.roles).length) return entry.roles;
+    let timer: Parameters<typeof clearTimeout>[0];
+    const late = new Promise<undefined>((resolve) => {
+      timer = setTimeout(resolve, Math.max(0, deadline - now()));
+    });
+    try {
+      return (await Promise.race([entry.pending, late])) ?? { ...entry.found };
+    } finally {
+      clearTimeout(timer);
+    }
   };
   op("mailboxes.list", async (input, ctx) => {
     const binding = bind(ctx, "folders", input),
@@ -377,7 +483,7 @@ export function createContracts(dataDir: string): ContractDefinition {
       seen: string[];
       bounded: boolean;
       partial?: string;
-      roles?: Record<string, string>;
+      roles?: unknown;
     } = cursor
       ? JSON.parse(cursor)
       : {
@@ -399,8 +505,11 @@ export function createContracts(dataDir: string): ContractDefinition {
       state.queue.length > 256
     )
       return fail("invalid_cursor", 409);
-    state.roles ??= await resolveRoles(ctx);
-    const roles = state.roles;
+    // Cursors from earlier versions carried the role map; roles now live in the per-connection cache.
+    delete state.roles;
+    const deadline = now() + roleBudgetMs;
+    // Start role resolution alongside the directory read; it never throws.
+    const pendingRoles = rolesBy(ctx, deadline);
     const route = state.route.split("?")[0];
     let data: any;
     try {
@@ -414,6 +523,7 @@ export function createContracts(dataDir: string): ContractDefinition {
       data = { value: [] };
       state.partial = "some_folders_unavailable";
     }
+    const roles = await pendingRoles;
     const items = (data.value ?? []).map((r: any) => ({
       id: r.id,
       name: r.displayName ?? r.id,
