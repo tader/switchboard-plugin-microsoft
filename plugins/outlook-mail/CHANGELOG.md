@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.1](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-mail-v1.4.0...outlook-mail-v1.4.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **outlook-mail:** retry throttled requests with backoff ([3bb4c27](https://github.com/tader/switchboard-plugin-microsoft/commit/3bb4c27e19d6a6de1edb2884fdd63e5b1395e0d3))
+* **outlook-mail:** retry throttled requests with backoff ([ee2cead](https://github.com/tader/switchboard-plugin-microsoft/commit/ee2ceadcb4cb8c0037e0e0f8588b882202c275c6))
+
 ## [1.4.0](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-mail-v1.3.0...outlook-mail-v1.4.0) (2026-11-05)
 
 
