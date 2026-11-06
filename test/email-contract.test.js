@@ -673,3 +673,47 @@ test("a directory read failure still fails the listing", async (t) => {
     code: "source_unavailable",
   });
 });
+
+for (const native of [false, true])
+  test(`Outlook ${native ? "REST" : "Graph"} retries explicit throttling with backoff`, async (t) => {
+    let attempts = 0;
+    const f = await fixture(t, () => ++attempts <= 2 ? json({}, 429) : json({ id: "m" }), native);
+    const started = Date.now();
+    assert.deepEqual(await f.call("messages.move", { id: "m", destinationId: "archive" }), { status: "accepted", resourceId: "m" });
+    assert.equal(attempts, 3);
+    assert.ok(Date.now() - started >= 650, "retries must back off");
+    assert.ok(f.requests.every((r) => r.method === "POST"));
+    assert.equal(new Set(f.requests.map((r) => r.body)).size, 1, "repeat the exact same operation");
+  });
+
+test("Outlook never retries a refusal, ambiguous server error or dropped connection", async (t) => {
+  const denied = await fixture(t, () => json({}, 403));
+  assert.deepEqual(await denied.call("messages.update", { id: "m", changes: { isRead: true } }), { status: "rejected", code: "permission_denied" });
+  assert.equal(denied.requests.length, 1);
+  const unavailable = await fixture(t, () => json({}, 503));
+  await assert.rejects(() => unavailable.call("messages.update", { id: "m", changes: { isRead: true } }), { code: "source_unavailable" });
+  assert.equal(unavailable.requests.length, 1);
+  const disconnected = await fixture(t, () => { throw new Error("fixture connection lost"); });
+  await assert.rejects(() => disconnected.call("messages.update", { id: "m", changes: { isRead: true } }));
+  assert.equal(disconnected.requests.length, 1);
+});
+
+test("Outlook retries are bounded and honor Retry-After seconds and dates", async (t) => {
+  const limited = await fixture(t, () => json({}, 429));
+  await assert.rejects(() => limited.call("messages.get", { id: "m" }), { code: "rate_limited", status: 429 });
+  assert.equal(limited.requests.length, 4);
+  for (const header of ["120", new Date(Date.now() + 120000).toUTCString()]) {
+    const longWait = await fixture(t, () => json({}, 429, { "retry-after": header }));
+    await assert.rejects(() => longWait.call("messages.get", { id: "m" }), (e) => e.code === "rate_limited" && e.retryAfterMs > 100000);
+    assert.equal(longWait.requests.length, 1);
+  }
+});
+
+test("Outlook cancellation during backoff prevents another request", async (t) => {
+  const f = await fixture(t, () => json({}, 429));
+  const controller = new AbortController(); f.ctx.signal = controller.signal;
+  const call = f.call("messages.update", { id: "m", changes: { isRead: true } });
+  setTimeout(() => controller.abort(), 20);
+  await assert.rejects(call);
+  assert.equal(f.requests.length, 1);
+});

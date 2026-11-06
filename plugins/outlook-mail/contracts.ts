@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
 import { emailOperations } from "./email-schema.ts";
 import { Cursors } from "./cursors.ts";
 import type {
@@ -63,48 +64,46 @@ async function request(
   method = "GET",
   body?: unknown,
 ) {
-  ctx.signal.throwIfAborted();
-  const r = await ctx.request({
-    url: root(ctx.connection) + path,
-    method,
-    headers: [["content-type", "application/json"]],
-    body:
-      body === undefined
-        ? undefined
-        : JSON.stringify(web(ctx.connection) ? wire(body) : body),
-  });
-  ctx.signal.throwIfAborted();
+  const retryAfter = (response: Response): number | null => {
+    const header = response.headers.get("retry-after");
+    if (header === null || !header.trim()) return null;
+    const seconds = Number(header);
+    if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+    const date = Date.parse(header);
+    return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
+  };
+  // A 429 explicitly rejects the request. Other errors, especially transport
+  // failures and 5xx responses to writes, can have an ambiguous outcome.
+  const delays = [250, 500, 1000];
+  let r: Response;
+  for (let attempt = 0; ; attempt++) {
+    ctx.signal.throwIfAborted();
+    r = await ctx.request({
+      url: root(ctx.connection) + path,
+      method,
+      headers: [["content-type", "application/json"]],
+      body: body === undefined ? undefined : JSON.stringify(web(ctx.connection) ? wire(body) : body),
+    });
+    ctx.signal.throwIfAborted();
+    if (r.status !== 429 || attempt >= delays.length) break;
+    const requested = retryAfter(r) ?? 0;
+    // Respect a longer provider delay rather than retrying prematurely.
+    if (requested > 3000) break;
+    await sleep(Math.max(delays[attempt], requested), undefined, { signal: ctx.signal });
+  }
   if (!r.ok) {
-    const code =
-      r.status === 401
-        ? "authentication_required"
-        : r.status === 403
-          ? "permission_denied"
-          : r.status === 404
-            ? "not_found"
-            : r.status === 409 || r.status === 412
-              ? "conflict"
-              : r.status === 429
-                ? "rate_limited"
-                : r.status >= 500
-                  ? "source_unavailable"
-                  : "invalid_request";
-    const retry = r.headers.get("retry-after"),
-      seconds = Number(retry),
-      delay = retry
-        ? Number.isFinite(seconds)
-          ? seconds * 1000
-          : Date.parse(retry) - Date.now()
-        : 60000;
+    const code = r.status === 401 ? "authentication_required"
+      : r.status === 403 ? "permission_denied"
+      : r.status === 404 ? "not_found"
+      : r.status === 409 || r.status === 412 ? "conflict"
+      : r.status === 429 ? "rate_limited"
+      : r.status >= 500 ? "source_unavailable" : "invalid_request";
+    const delay = retryAfter(r);
     throw Object.assign(Error(code), {
       code,
       status: r.status,
       ...(r.status === 429
-        ? {
-            retryAfterMs: Number.isFinite(delay)
-              ? Math.max(1000, Math.min(86400000, delay))
-              : 60000,
-          }
+        ? { retryAfterMs: delay === null ? 60000 : Math.max(1000, Math.min(86400000, delay)) }
         : {}),
     });
   }
