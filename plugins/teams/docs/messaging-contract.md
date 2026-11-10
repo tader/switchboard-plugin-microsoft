@@ -70,6 +70,8 @@ notes stream. Other system streams are excluded. No conversation is created as a
 side effect of discovery.
 
 Reaction users preserve the IDs Teams returns. Display names use names already
-observed in the message page or authenticated account; unresolved identities
+observed in the message page or authenticated account, with bounded,
+account-scoped directory lookups for other participants. A slow or unavailable
+directory never blocks history beyond the lookup budget; unresolved identities
 remain unnamed. Truncated or malformed user lists report incomplete coverage,
 and empty provider reaction entries are not displayed as active reactions.
