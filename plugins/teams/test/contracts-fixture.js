@@ -74,6 +74,11 @@ export async function fixture(t, methodId = "tokens") {
         ],
         _metadata: {},
       });
+    if (p.includes("/messages/") && p.endsWith("/properties") && ["PUT","DELETE"].includes(options.method)) {
+      const key=JSON.parse(options.body).emotions.key;
+      root.properties.emotions=options.method==="PUT"?[{key,users:[{mri:"8:orgid:"+oid}]}]:[];
+      return Response.json({});
+    }
     if (p.includes("/messages/") && options.method === undefined) {
       const id = p.split("/").at(-1);
       const sent = posts.find((x) => x.id === id);

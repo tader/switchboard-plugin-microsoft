@@ -3,6 +3,8 @@ import { messagingOperations } from "./messaging-schema.js";
 import { MessagingCursors } from "./messaging-cursors.js";
 import { AdapterError } from "./errors.js";
 import { normalize, arrivalMillis } from "./teams-api.js";
+const REACTIONS = {"👍":"like","❤️":"heart","😂":"laugh","😮":"surprised","😢":"sad","😡":"angry"};
+const REACTION_EMOJI = Object.fromEntries(Object.entries(REACTIONS).map(([emoji,name]) => [name,emoji]));
 const fail = (code, status = 400) => new AdapterError(code, code, status);
 const terminal = new Set([
   "token_import_required",
@@ -64,6 +66,12 @@ export function project(raw, conversationId, self) {
           ? "available"
           : "unavailable"));
   const parent = m.parentMessageId;
+  let reactionMetadataValid=true;
+  if(raw.messagetype || raw.messageType){
+    let value=raw.properties?.emotions;
+    if(typeof value==="string"){try{value=JSON.parse(value)}catch{reactionMetadataValid=false}}
+    if(value!==undefined&&!Array.isArray(value))reactionMetadataValid=false;
+  }
   return {
     id: mid(m.id, parent),
     conversationId,
@@ -72,6 +80,7 @@ export function project(raw, conversationId, self) {
     authorDisplayName: m.author?.trim().slice(0, 512) || null,
     createdAt: date(m.time),
     isOwn: m.authorId && self ? m.authorId === self : null,
+    ...(reactionMetadataValid && Array.isArray(m.reactions) ? {reactions:m.reactions.filter(r=>typeof r?.key==="string").map(r=>({emoji:REACTION_EMOJI[r.key]??`:${r.key}:`,count:Array.isArray(r.users)?r.users.length:null,me:Array.isArray(r.users)&&self?r.users.some(u=>u?.mri===self):null}))}:{}),
     contentState: state,
     contentType:
       kind && !/^(Text|RichText(?:\/.*)?)$/.test(kind) ? "system" : "text",
@@ -306,6 +315,23 @@ export function createMessaging(root) {
       return ["invalid_request", "not_found"].includes(e.code)
         ? { status: "rejected", code: e.code }
         : { status: "uncertain" };
+    }
+  });
+  op("messaging.reactions.update", async (input, ctx) => {
+    const kind=decode(input.conversationId).kind;
+    if(kind!=="chat") return {status:"rejected",code:"unsupported"};
+    const message=target(input.messageId);
+    if(message.parent) return {status:"rejected",code:"unsupported"};
+    const reaction=REACTIONS[input.emoji] ?? (/^:[a-z][a-z0-9_-]{0,61}:$/.test(input.emoji)?input.emoji.slice(1,-1):null);
+    if(!reaction) return {status:"rejected",code:"invalid_request"};
+    if(typeof ctx.idempotencyKey!=="string"||!ctx.idempotencyKey)throw fail("invalid_idempotency_key");
+    const idempotencyKey="contract:"+createHash("sha256").update(JSON.stringify([ctx.connection.id,ctx.idempotencyKey])).digest("hex");
+    try {
+      const result=await request(ctx,`/chats/${encodeURIComponent(input.conversationId)}/messages/${encodeURIComponent(message.id)}/reactions`,{reaction,selected:!input.remove,idempotencyKey},"POST");
+      return result.status==="accepted_by_api" || result.status==="reaction_observed" ? {status:"accepted"} : {status:"uncertain"};
+    } catch(e) {
+      if(["authentication_required","idempotency_conflict","permission_denied","rate_limited"].includes(e.code)||ctx.signal.aborted)throw e;
+      return ["invalid_request","not_found"].includes(e.code)?{status:"rejected",code:e.code}:{status:"uncertain"};
     }
   });
   operations["messaging.messages.send"].inputSchema = structuredClone(
