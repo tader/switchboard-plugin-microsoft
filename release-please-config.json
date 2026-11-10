@@ -144,6 +144,19 @@
         }
       ],
       "initial-version": "1.0.0"
+    },
+    "plugins/sharepoint": {
+      "release-type": "node",
+      "component": "sharepoint",
+      "include-component-in-tag": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "plugin.json",
+          "jsonpath": "$.version"
+        }
+      ],
+      "initial-version": "1.0.0"
     }
   }
 }

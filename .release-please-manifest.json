@@ -9,5 +9,6 @@
   "plugins/teams": "0.12.3",
   "plugins/word": "1.1.0",
   "plugins/powerpoint": "1.1.0",
-  "plugins/org-explorer": "1.1.0"
+  "plugins/org-explorer": "1.1.0",
+  "plugins/sharepoint": "1.0.0"
 }

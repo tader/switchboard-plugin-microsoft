@@ -52,6 +52,7 @@ export function allowRequest(service: string, req: { method: string; url: URL },
     if (/^\/me\/drive(?:\/|$|:)/i.test(p)) return true;
     return conn.config.access === 'all' && /^\/(drives|sites|shares)(\/|$)/i.test(p);
   }
+  if (service === 'sharepoint') return backend(conn) === 'graph' && (conn.config.access === 'full' || read) && /^\/(sites|drives)(?:\/|$)/i.test(p);
   if (service === 'microsoft-graph') {
     if (p === '/me') return read;
     const permissions = required.filter(x => x.startsWith(RESOURCES.graph + '/')).map(x => split(x)[1]);
