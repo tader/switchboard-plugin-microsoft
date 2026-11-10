@@ -241,7 +241,18 @@ test("common reaction writes use the chat's native durable action",async t=>{
 
 test("reaction projection retains unknown users instead of inventing ownership",()=>{
  const row=project({id:"100",text:"Hi",time:"2026-11-03T09:00:00Z",reactions:[{key:"like",users:[{mri:"self"},{mri:"other"}]},{key:"unknown"}]},chatId,"self");
- assert.deepEqual(row.reactions,[{emoji:"👍",count:2,me:true},{emoji:":unknown:",count:null,me:null}]);
+ assert.deepEqual(row.reactions,[{emoji:"👍",count:2,me:true,users:[{id:"self",displayName:null},{id:"other",displayName:null}],usersComplete:true},{emoji:":unknown:",count:null,me:null}]);
+});
+
+test("reaction names use observed identities without guessing incomplete people",()=>{
+ const row=project({id:"100",text:"Hi",authorId:"other",author:"Alice",reactions:[{key:"like",users:[{mri:"other"},{mri:"self"},{noId:true}]}]},chatId,"self",new Map([["self","Me"]]));
+ assert.deepEqual(row.reactions[0].users,[{id:"other",displayName:"Alice"},{id:"self",displayName:"Me"}]);
+ assert.equal(row.reactions[0].usersComplete,false);
+ assert.equal(row.reactions[0].me,true);
+});
+test("empty provider reaction entries do not appear as active reactions",()=>{
+ const row=project({id:"100",text:"Hi",reactions:[{key:"like",users:[]}]},chatId,"self");
+ assert.deepEqual(row.reactions,[]);
 });
 
 test("malformed reaction metadata does not erase a previously known state",()=>{
