@@ -498,6 +498,24 @@ export class TeamsAPI {
     const items = order([...seen.values()]);
     return { conversationId: id, items: olderPages ? items.slice(0, limit) : items.slice(-limit), hasMore: Boolean(page.next), completeHistory: false, coverage: 'api_messages', mayMarkRead: false };
   }
+  // Reactor identities are supplied by Teams; resolve only a small bounded set
+  // through the same account-scoped directory used for conversation titles.
+  // Slow/unavailable directory calls must not hold up chat history indefinitely.
+  async reactionDisplayNames(items, waitMs = 1500) {
+    const known = new Map();
+    const self = this.selfMri(), ownName = this.credentials.identity.name;
+    if (typeof ownName === 'string' && ownName.trim()) known.set(self, ownName.trim());
+    for (const item of items) if (typeof item.authorId === 'string' && typeof item.author === 'string' && item.author.trim()) known.set(item.authorId, item.author.trim());
+    const ids = new Set();
+    for (const item of items) for (const reaction of Array.isArray(item.reactions) ? item.reactions : []) for (const user of Array.isArray(reaction?.users) ? reaction.users : []) {
+      if (typeof user?.mri === 'string' && /^8:orgid:[a-f0-9-]{36}$/i.test(user.mri) && !known.has(user.mri) && !user.displayName && ids.size < 12) ids.add(user.mri);
+    }
+    let timer;
+    const pending = Promise.all([...ids].map(async id => { try { const value = await this.participantName(id); if (value) known.set(id, value); } catch {} }));
+    await Promise.race([pending, new Promise(resolve => { timer = setTimeout(resolve, waitMs); })]);
+    clearTimeout(timer);
+    return items.map(item => ({...item, ...(Array.isArray(item.reactions) ? {reactions:item.reactions.map(reaction => reaction && typeof reaction === 'object' ? ({...reaction, ...(Array.isArray(reaction.users) ? {users:reaction.users.map(user => user && typeof user === 'object' ? ({...user, ...(typeof user.mri === 'string' && !user.displayName && known.has(user.mri) ? {displayName:known.get(user.mri)} : {})}) : user)} : {})}) : reaction)} : {})}));
+  }
   async history(id, { limit = 100, cursor, format = 'json', kind = 'chat', parentMessageId = null, rootsOnly = false } = {}) {
     for (const [key, state] of this.cursors) if (state.expires < Date.now()) this.cursors.delete(key);
     let state;
@@ -515,7 +533,7 @@ export class TeamsAPI {
     const page = await this.page(state.threadId, limit, state.next);
     const sourceItems = state.root ? order([...page.items.filter(item => item.id !== state.root.id), state.root]) : page.items;
     if (parentMessageId && sourceItems.some(item => item.parentMessageId && item.parentMessageId !== parentMessageId)) throw new AdapterError('api_schema_changed', 'Teams returned messages from a different thread.', 502);
-    const seen = new Set(state.seen), items = sourceItems.filter(item => !rootsOnly || !item.parentMessageId).filter(message => { if (seen.has(message.id)) return false; seen.add(message.id); return true; });
+    const seen = new Set(state.seen), items = await this.reactionDisplayNames(sourceItems.filter(item => !rootsOnly || !item.parentMessageId).filter(message => { if (seen.has(message.id)) return false; seen.add(message.id); return true; }));
     const hasMore = Boolean(page.next && page.next !== state.next && !state.links.includes(page.next)), nextCursor = hasMore ? randomUUID() : null;
     const result = { conversationId: id, items, hasMore, nextCursor, completeHistory: false, coverage: parentMessageId ? 'api_channel_thread_history' : rootsOnly ? 'api_channel_roots' : 'api_history', mayMarkRead: false,
       ...(parentMessageId ? { parentMessageId } : {}),

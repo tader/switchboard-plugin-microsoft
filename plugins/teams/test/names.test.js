@@ -29,3 +29,16 @@ test('lookups coalesce, bound concurrency, and propagate terminal errors',async(
 test('projected names remain separate from routing identity',()=>{
  const m=project({id:'1',text:'hello',authorId:peer,author:'Alex'},'chat','self');assert.equal(m.authorId,peer);assert.equal(m.authorDisplayName,'Alex');
 });
+test('reaction names resolve exact identities without changing original message data',async()=>{
+ const a=api();let calls=0;a.request=async(_s,path)=>{calls++;return {value:{mri:decodeURIComponent(path.split('/')[1]),displayName:'Robin'}}};
+ const input=[{id:'1',reactions:[{key:'like',users:[{mri:peer}]}]}];
+ const [row]=await a.reactionDisplayNames(input);
+ assert.equal(row.reactions[0].users[0].displayName,'Robin');assert.equal(row.reactions[0].users[0].mri,peer);assert.equal(input[0].reactions[0].users[0].displayName,undefined);assert.equal(calls,1);
+ const common=project(row,'chat',a.selfMri());assert.equal(common.reactions[0].users[0].displayName,'Robin');
+});
+test('slow or invalid reaction names do not hold history or fabricate names',async()=>{
+ const a=api();a.participantName=()=>new Promise(()=>{});
+ const start=Date.now(),input=[{reactions:[{key:'like',users:[{mri:peer}]},{key:'heart',users:{bad:true}}]}];
+ const [row]=await a.reactionDisplayNames(input,10);
+ assert.ok(Date.now()-start<1000);assert.equal(row.reactions[0].users[0].displayName,undefined);assert.deepEqual(row.reactions[1].users,{bad:true});
+});
