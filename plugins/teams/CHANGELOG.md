@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.14.0...teams-v0.14.1) (2026-11-10)
+
+
+### Bug Fixes
+
+* **teams:** document reaction user coverage ([922b86a](https://github.com/tader/switchboard-plugin-microsoft/commit/922b86a17d5a2fbd2010177f94c97c237060c8e0))
+
 ## [0.14.0](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.13.3...teams-v0.14.0) (2026-11-10)
 
 
