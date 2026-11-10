@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.14.1...teams-v0.15.0) (2026-11-10)
+
+
+### Features
+
+* **teams:** resolve reaction participant names ([948aabe](https://github.com/tader/switchboard-plugin-microsoft/commit/948aabee2c54d3207f09d1af4c8bb494fc440f9a))
+
 ## [0.14.1](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.14.0...teams-v0.14.1) (2026-11-10)
 
 
