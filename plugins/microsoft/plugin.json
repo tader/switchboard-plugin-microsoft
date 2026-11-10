@@ -44,6 +44,6 @@
   ],
   "dependencyVersions": {
     "oauth2": "^1.0.0",
-    "microsoft-authentication": "^1.0.0"
+    "microsoft-authentication": "^1.2.0"
   }
 }

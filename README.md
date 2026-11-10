@@ -15,6 +15,7 @@ Open **Plugins → Community** to install individual plugins. Alternatively inst
 | Outlook Mail | `plugins/outlook-mail` |
 | Outlook Calendar | `plugins/outlook-calendar` |
 | OneDrive | `plugins/onedrive` |
+| SharePoint | `plugins/sharepoint` |
 | Microsoft To Do | `plugins/microsoft-todo` |
 | Excel | `plugins/excel` |
 | Teams | `plugins/teams` |
@@ -38,7 +39,7 @@ Install this repository before upgrading a Switchboard instance that bundles `mi
 
 ## OpenAPI descriptions
 
-The slim Graph descriptions ship with the plugin. Rebuild them with `npm run build:openapi -- /path/to/openapi.yaml`. The build helper is self-contained and uses YAML only during development.
+The slim Graph descriptions ship with the plugin. Rebuild the generated descriptions with `npm run build:openapi -- /path/to/openapi.yaml`; the focused SharePoint description is maintained separately in `plugins/microsoft/openapi/sharepoint.json`. The build helper is self-contained and uses YAML only during development.
 
 ## Development
 
@@ -49,3 +50,7 @@ Keep `plugin.json` and `package.json` versions in sync. Commit version changes b
 ## Releases
 
 Release-please opens version and changelog pull requests from Conventional Commits. Merge the release PR to publish its tag and GitHub release. Plugin manifests are updated with their package versions. Family repositories maintain an independent version for each plugin.
+
+## SharePoint
+
+SharePoint uses a work or school account. Select read access (`Sites.Read.All`) or read and edit access (`Sites.ReadWrite.All`); the app registration or existing Microsoft Authentication session must already have the selected permission, and site permissions still apply. Graph returns pages of results with `@odata.nextLink`; follow it using the same connection. Read modern page contents using `$expand=canvasLayout`, and list item fields using `$expand=fields`. Graph supports only its documented modern page web parts; new pages are drafts and are not published automatically. Classic pages are not supported by the page API. Use the SharePoint File Download connection to download files up to 25 MiB; it follows Microsoft transfer redirects without sending the Graph token to the transfer host. Word and PowerPoint plugins can read structured Office documents from SharePoint drives when configured for all accessible files.
