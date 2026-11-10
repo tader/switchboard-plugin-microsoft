@@ -4,7 +4,7 @@ The `teams-web` service implements the optional shared Messaging contract beside
 its existing provider API. Enable shared contracts on a compatible Switchboard
 core to discover it. No provider operation is removed.
 
-Supported operations: conversations.list/get and messages.list/get/send.
+Supported operations: conversations.list/get, messages.list/get/send and reactions.update for chat messages. Channel reactions remain unsupported and return a rejection.
 Conversation IDs retain the existing account-bound chat/channel IDs. Direct/group
 classification is verified from membership when not present in discovery. Channel
 replies require an exact thread root; new channel roots are not advertised.

@@ -108,7 +108,7 @@ try {
   const descriptor = await (
     await request(`/connections/${id}/contracts/v1`)
   ).json();
-  assert.equal(descriptor.operations.length, 5);
+  assert.equal(descriptor.operations.length, 6);
   const discovery = await (await request("/contracts/v1/connections?category=messaging")).json();
   assert.equal(discovery.connections[0].id, id);
   assert.deepEqual(descriptor.changes, { native: false, reconciliation: true });
@@ -147,6 +147,9 @@ try {
       "accepted",
     );
   assert.equal(f.posts.length, 1);
+  const reaction={conversationId:chatId,messageId:"100",emoji:"👍",remove:false};
+  for(let n=0;n<2;n++){const response=await call("messaging.reactions.update",reaction,"reaction-contract");assert.equal(response.status,200);assert.equal((await response.json()).status,"accepted");}
+  assert.equal(f.requests.filter(x=>x.options.method==="PUT"&&x.url.includes("name=emotions")).length,1);
   f.failSend(true);
   for (let n = 0; n < 2; n++)
     assert.equal(

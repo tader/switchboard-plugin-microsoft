@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { Ajv } from "ajv";
 import { fixture, chatId, channelId } from "./contracts-fixture.js";
+import { project } from "../lib/messaging.js";
 import { messagingOperations } from "../lib/messaging-schema.js";
 const ajv = new Ajv({ strict: false });
 async function call(f, name, input, ctx = f.invocation()) {
@@ -171,7 +172,7 @@ test("read-only guards include raw writes; auth expiry is terminal and resource 
 for (const method of ["browser", "tokens", "authentication-source"]) {
  test(`Messaging discovery and requests preserve access with ${method}`, async t => {
   const f=await fixture(t,method), contract=f.service.contracts;
-  assert.equal(contract.available(f.connection).length,5);
+  assert.equal(contract.available(f.connection).length,6);
   const list=await call(f,"messaging.conversations.list",{});
   assert.equal(list.items[0].kind,"direct");
   const history=await call(f,"messaging.messages.list",{conversationId:chatId});
@@ -228,4 +229,22 @@ test("common discovery, history and durable sends support the account-private se
  const history=await call(f,"messaging.messages.list",{conversationId:id});assert.equal(history.items[0].isOwn,true);
  const input={conversationId:id,text:"Self fixture"};const result=await call(f,"messaging.messages.send",input);
  assert.equal(result.status,"accepted");assert.deepEqual(await call(f,"messaging.messages.send",input),result);assert.equal(f.posts.length,1);
+});
+
+test("common reaction writes use the chat's native durable action",async t=>{
+ const f=await fixture(t);const input={conversationId:chatId,messageId:"100",emoji:"👍",remove:false};
+ assert.deepEqual(await call(f,"messaging.reactions.update",input),{status:"accepted"});
+ const writes=f.requests.filter(r=>r.options.method==="PUT"&&r.url.includes("name=emotions"));assert.equal(writes.length,1);
+ assert.deepEqual(await call(f,"messaging.reactions.update",input),{status:"accepted"});assert.equal(f.requests.filter(r=>r.options.method==="PUT"&&r.url.includes("name=emotions")).length,1);
+ assert.deepEqual(await call(f,"messaging.reactions.update",{...input,conversationId:channelId},f.invocation(f.connection,"channel-key")),{status:"rejected",code:"unsupported"});
+});
+
+test("reaction projection retains unknown users instead of inventing ownership",()=>{
+ const row=project({id:"100",text:"Hi",time:"2026-11-03T09:00:00Z",reactions:[{key:"like",users:[{mri:"self"},{mri:"other"}]},{key:"unknown"}]},chatId,"self");
+ assert.deepEqual(row.reactions,[{emoji:"👍",count:2,me:true},{emoji:":unknown:",count:null,me:null}]);
+});
+
+test("malformed reaction metadata does not erase a previously known state",()=>{
+ const row=project({id:"100",content:"Hi",messagetype:"Text",properties:{emotions:"{invalid"}},chatId,"self");
+ assert.equal(row.reactions,undefined);
 });
