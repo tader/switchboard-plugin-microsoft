@@ -7,6 +7,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write
+  actions: write
 concurrency:
   group: release-please
   cancel-in-progress: false
@@ -17,8 +18,27 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      # Keep the upstream action pinned; omit only its optional author account lookup.
+      # GitHub returns NOT_FOUND for some commit authors, aborting release discovery.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: googleapis/release-please-action
+          ref: 45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+          path: .github/actions/release-please-upstream
+          persist-credentials: false
+      - run: node scripts/patch-release-please-author-query.js .github/actions/release-please-upstream/dist/index.js
+      - uses: ./.github/actions/release-please-upstream
         id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+      - name: Dispatch required checks for the release PR head
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_PRS: ${{ steps.release.outputs.prs }}
+        run: node scripts/dispatch-release-checks.js

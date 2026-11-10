@@ -1,7 +1,7 @@
 {
   "id": "teams-web",
   "name": "Teams",
-  "version": "0.12.3",
+  "version": "0.13.3",
   "main": "index.js",
   "description": "Teams chats, channels and message actions through direct APIs using shared Microsoft Authentication.",
   "icon": "icon.svg",
@@ -10,12 +10,18 @@
       "key": "browserPath",
       "label": "Chrome or Edge executable",
       "description": "Optional. Chrome and Edge are detected automatically on macOS. Used only for authentication."
+    },
+    {
+      "key": "maxResponseMiB",
+      "label": "Maximum API response size (MiB)",
+      "placeholder": "8",
+      "description": "Whole number from 1 to 256. Default 8. Large accounts may need more when connecting."
     }
   ],
   "dependencies": [
     "microsoft-authentication"
   ],
   "dependencyVersions": {
-    "microsoft-authentication": "^1.1.0"
+    "microsoft-authentication": "^1.1.3"
   }
 }

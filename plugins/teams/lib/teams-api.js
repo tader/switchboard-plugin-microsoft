@@ -43,7 +43,10 @@ function arrayProperty(value) {
 }
 export function normalize(raw) {
   const parent = raw.parentMessageId ?? raw.properties?.parentMessageId ?? raw.rootMessageId;
-  return { id: String(raw.id), text: plainText(raw.content, raw.messagetype ?? raw.messageType),
+  const type=raw.messagetype??raw.messageType;
+  const restricted=[raw.isRestricted,raw.isHidden,raw.properties?.isRestricted].some(v=>v===true||v==='true'||v==='True');
+  const unavailable=typeof raw.content!=='string'||type&&!/^(Text|RichText(?:\/.*)?)$/.test(type);
+  return { ...(restricted?{contentState:'restricted'}:unavailable?{contentState:'unavailable'}:{}), id: String(raw.id), text: plainText(raw.content, raw.messagetype ?? raw.messageType),
     author: raw.imdisplayname ?? raw.imDisplayName ?? null, authorId: typeof raw.from === 'string' ? raw.from.split('/contacts/').at(-1) : null,
     time: raw.originalarrivaltime ?? raw.originalArrivalTime ?? raw.composetime ?? raw.composeTime ?? null,
     richText: /html/i.test(raw.messagetype ?? raw.messageType ?? '') ? String(raw.content ?? '') : null,
@@ -117,7 +120,7 @@ export function addQuote(payload, selected) {
 }
 
 export class TeamsAPI {
-  constructor(session, { fetcher = fetch } = {}) { this.session = session; this.fetcher = fetcher; this.cursors = new Map(); this.searchResults = new Map(); this.discoveryCursors = new Map(); }
+  constructor(session, { fetcher = fetch, maxResponseMiB } = {}) { this.session = session; this.fetcher = fetcher; this.maxResponseMiB = maxResponseMiB; this.cursors = new Map(); this.searchResults = new Map(); this.discoveryCursors = new Map(); }
   get credentials() {
     const c = this.session.credentials;
     if (!c) throw new AdapterError('signin_required', 'Reconnect this connection to enable API authentication.', 503);
@@ -131,7 +134,7 @@ export class TeamsAPI {
     if (!url.href.startsWith(base) || url.username || url.password) throw new AdapterError('api_url_rejected', 'Invalid Teams API target.', 400);
     if (service === 'search' && !c.tokens.substrate?.value) throw new AdapterError('search_token_required', 'Search requires a Substrate token acquired using renewal credentials.', 503);
     const auth = service === 'messages' ? { Authentication: `skypetoken=${c.chatToken.value}` } : { Authorization: `Bearer ${c.tokens[service === 'search' ? 'substrate' : service === 'csa' ? 'chatsvcagg' : 'skype']?.value}` };
-    return requestJSON(url.href, { ...options, headers: { ...auth, ...(options.body ? { 'content-type': 'application/json' } : {}) } }, this.fetcher);
+    return requestJSON(url.href, { ...options, maxResponseMiB: this.maxResponseMiB, headers: { ...auth, ...(options.body ? { 'content-type': 'application/json' } : {}) } }, this.fetcher);
   }
   conversationURL(limit, link) {
     const first = new URL(`users/ME/conversations?view=mychats&pageSize=${limit}`, this.credentials.messageOrigin + '/v1/');
@@ -153,6 +156,14 @@ export class TeamsAPI {
   }
   discoveredChat(raw) {
     const type = raw.threadProperties?.threadType;
+    // Notes-to-self is an account-private conversation, not a group thread.
+    // Recognize only its exact provider ID and type; other system streams stay hidden.
+    if (raw.id === '48:notes' && type === 'streamofnotes') return {
+      id: raw.id, title: 'Notes to self', isOneOnOne: true,
+      discoverySource: 'regional_self_notes',
+      lastMessage: { originalArrivalTime: raw.lastMessage?.originalArrivalTime ?? raw.properties?.lastimreceivedtime ?? null },
+      isMessagingDisabled: raw.isMessagingDisabled, isDisabled: raw.isDisabled,
+    };
     if (!['chat', 'meeting'].includes(type) || !/^19:[^/]+@(?:thread\.v2|unq\.gbl\.spaces)$/.test(raw.id)) return null;
     const props = raw.properties ?? {};
     const marker = value => typeof value === 'string' && /^\d+;\d+;\d+$/.test(value) && Number.isSafeInteger(Number(value.split(';')[0])) ? Number(value.split(';')[0]) : null;
@@ -180,7 +191,7 @@ export class TeamsAPI {
     for (const raw of page.raw) {
       if (seen.has(raw.id)) continue;
       seen.add(raw.id); const chat = this.discoveredChat(raw);
-      if (chat) items.push({ id: encode('chat', chat.id), title: chat.title, unread: typeof chat.isRead === 'boolean' ? !chat.isRead : null, hidden: chat.hidden, time: chat.lastMessage.originalArrivalTime });
+      if (chat) items.push({ id: encode('chat', chat.id), title: await this.conversationTitle(chat), unread: typeof chat.isRead === 'boolean' ? !chat.isRead : null, hidden: chat.hidden, time: chat.lastMessage.originalArrivalTime });
       else excluded++;
     }
     // Normalize links before comparing so relative/absolute aliases cannot loop.
@@ -228,6 +239,54 @@ export class TeamsAPI {
     if (conversation.discoverySource !== 'regional_conversations') return;
     const roster = await this.request('messages', `threads/${encodeURIComponent(conversation.id)}/members`);
     if (!Array.isArray(roster?.members) || !roster.members.some(member => member.id === this.selfMri())) throw new AdapterError('conversation_unavailable', 'Current chat membership was not verified.', 404);
+  }
+  async participantName(mri) {
+    if (typeof mri !== 'string' || !/^8:orgid:[a-f0-9-]{36}$/i.test(mri)) return null;
+    const account = this.account(), key = `${account}:${mri}`;
+    this.participantNames ??= new Map();
+    const cached = this.participantNames.get(key);
+    if (cached && cached.expires > Date.now()) return cached.value;
+    if (this.participantNames.size >= 4096) this.participantNames.delete(this.participantNames.keys().next().value);
+    const value = (async () => {
+      this.nameWaiters ??= []; this.nameActive ??= 0;
+      if (this.nameActive >= 4) await new Promise(resolve => this.nameWaiters.push(resolve));
+      else this.nameActive++;
+      try {
+        const result = await this.request('mt', `users/${encodeURIComponent(mri)}/?throwIfNotFound=false&enableGuest=true&includeIBBarredUsers=true&skypeTeamsInfo=true`);
+        if (this.account() !== account) return null;
+        const person = result?.value;
+        return person?.mri === mri && typeof person.displayName === 'string' ? person.displayName.trim() || null : null;
+      } catch (error) {
+        if (['api_unauthorized', 'api_rate_limited'].includes(error.code) || error.name === 'AbortError') throw error;
+        return null;
+      } finally {
+        const next = this.nameWaiters.shift(); if (next) next(); else this.nameActive--;
+      }
+    })();
+    const entry = { value, expires: Infinity }; this.participantNames.set(key, entry);
+    try { const name = await value; entry.expires = Date.now() + (name ? 3600_000 : 300_000); return name; }
+    catch (error) { this.participantNames.delete(key); throw error; }
+  }
+  async conversationTitle(chat) {
+    const title = chat.title || chat.displayName || chat.threadProperties?.topic;
+    const identityTitle = typeof title === 'string' && title.split(',').every(v => /^8:orgid:[a-f0-9-]{36}$/i.test(v.trim()));
+    if (title && !identityTitle && !['Teams', 'Teams chat'].includes(title)) return title;
+    let members = chat.members;
+    if (!Array.isArray(members) || !members.length) {
+      const ids = identityTitle ? title.split(',').map(v => ({ mri: v.trim() })) : [];
+      if (ids.length) members = ids;
+      else {
+        try {
+          const roster = await this.request('messages', `threads/${encodeURIComponent(chat.id)}/members`);
+          if (Array.isArray(roster?.members) && roster.members.some(m => m.id === this.selfMri())) members = roster.members.map(m => ({ ...m, mri: m.id }));
+        } catch (error) {
+          if (['api_unauthorized', 'api_rate_limited'].includes(error.code) || error.name === 'AbortError') throw error;
+        }
+      }
+    }
+    const peers = (members || []).filter(m => m.mri && m.mri !== this.selfMri());
+    const names = await Promise.all(peers.map(async m => (typeof m.friendlyName === 'string' && m.friendlyName.trim() && m.friendlyName !== m.mri ? m.friendlyName : null) || await this.participantName(m.mri) || m.mri));
+    return names.join(', ') || title || 'Teams chat';
   }
   selfMri() { return `8:orgid:${this.credentials.identity.oid}`; }
   async profile(email = this.credentials.identity.email) {
@@ -350,12 +409,12 @@ export class TeamsAPI {
   }
   async chats(unreadOnly = false) {
     const data = await this.directory(true, undefined, true);
-    const items = data.chats.filter(chat => !chat.isConversationDeleted && (!unreadOnly || chat.isRead === false)).map(chat => ({
-      id: encode('chat', chat.id), title: chat.title || chat.members?.filter(member => member.mri !== this.selfMri()).map(member => member.friendlyName || member.mri).join(', ') || 'Teams chat',
+    const items = await Promise.all(data.chats.filter(chat => !chat.isConversationDeleted && (!unreadOnly || chat.isRead === false)).map(async chat => ({
+      id: encode('chat', chat.id), title: await this.conversationTitle(chat),
       unread: typeof chat.isRead === 'boolean' ? !chat.isRead : null, hidden: Boolean(chat.hidden),
       preview: chat.lastMessage ? plainText(chat.lastMessage.content, chat.lastMessage.messageType) : null,
       time: chat.lastMessage?.originalArrivalTime ?? null,
-    }));
+    })));
     const partial = Boolean(data.metadata?.isPartialData || data.metadata?.hasMoreChats || data.metadata?.forwardSyncToken);
     return { items, discoveryComplete: data.discovery ? data.discovery.complete : !partial, truncated: data.discovery ? data.discovery.truncated : partial, ...(data.discovery ? { discovery: data.discovery } : {}), completeAccount: false, coverage: data.discovery?.coverage ?? 'api_conversation_snapshot', mayMarkRead: false };
   }
@@ -369,6 +428,14 @@ export class TeamsAPI {
     catch { throw new AdapterError('invalid_conversation', 'Use a conversation ID returned by the Teams listing.', 400); }
     // Old DOM IDs with an exact threadId can migrate after server membership lookup.
     if (typeof value.threadId !== 'string' || !value.threadId || value.threadId.length > 1024 || /[\u0000-\u001f/]/.test(value.threadId) || value.kind && value.kind !== kind || value.parentMessageId) throw new AdapterError('invalid_conversation', 'Refresh the conversation ID with listTeamsChats or listTeamsChannels.', 400);
+    if (kind === 'chat' && value.threadId === '48:notes') {
+      // Revalidate in the authenticated ME scope. A caller cannot substitute a
+      // different account or turn an arbitrary system stream into a destination.
+      const raw = await this.request('messages', 'users/ME/conversations/48%3Anotes?view=msnp24Equivalent');
+      const own = this.discoveredChat(raw);
+      if (raw.id !== '48:notes' || own?.discoverySource !== 'regional_self_notes') throw new AdapterError('conversation_unavailable', 'Self conversation was not returned for this account.', 404);
+      return own;
+    }
     const data = await this.directory();
     let match = kind === 'chat' ? data.chats.find(chat => chat.id === value.threadId) : data.teams.flatMap(team => team.channels || []).find(channel => channel.id === value.threadId);
     if (!match && kind === 'chat' && !value.recipientEmail) {
@@ -594,7 +661,7 @@ export class TeamsAPI {
       const id = result?.OriginalArrivalTime ?? result?.originalarrivaltime ?? result?.id;
       if (id == null) throw new Error();
       return { status: 'accepted_by_api', message: { id: String(id), clientMessageId: prepared.payload.clientmessageid }, ...(prepared.channelReplyGuard ? { channelId: prepared.channelReplyGuard.channelId, parentMessageId: prepared.channelReplyGuard.parentMessageId } : {}), deliveryConfirmed: false };
-    } catch { throw new AdapterError('send_uncertain', 'The send was attempted. Inspect Teams before further action; reuse this idempotency key.', 409); }
+    } catch (error) {const uncertain=new AdapterError('send_uncertain', 'The send was attempted. Inspect Teams before further action; reuse this idempotency key.', 409);if(error.reauthenticationRequired||error.code==='api_unauthorized')uncertain.reauthenticationRequired=true;throw uncertain; }
   }
   async reactions(id, mid) {
     const conversation = await this.resolve(id), { raw } = await this.exactMessage(conversation.id, mid);
