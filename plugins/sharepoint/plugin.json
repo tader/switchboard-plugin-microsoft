@@ -1,7 +1,7 @@
 {
   "id": "sharepoint",
   "name": "SharePoint",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Sites, pages, lists and document libraries in SharePoint.",
   "dependencies": [
     "microsoft"
