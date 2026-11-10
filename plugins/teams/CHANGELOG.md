@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.0](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.13.3...teams-v0.14.0) (2026-11-10)
+
+
+### Features
+
+* **teams:** support common chat reactions ([1717cc1](https://github.com/tader/switchboard-plugin-microsoft/commit/1717cc172ff682efa0aa6c37b1c930e9477fe8ac))
+* **teams:** support common chat reactions ([9dee535](https://github.com/tader/switchboard-plugin-microsoft/commit/9dee5352fe7cfd04c79ca09a0e263aac651483c6))
+
 ## [0.13.3](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.13.2...teams-v0.13.3) (2026-11-05)
 
 

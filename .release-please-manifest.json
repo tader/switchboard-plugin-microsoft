@@ -6,7 +6,7 @@
   "plugins/microsoft-todo": "1.2.0",
   "plugins/microsoft-authentication": "1.2.0",
   "plugins/excel": "1.1.0",
-  "plugins/teams": "0.13.3",
+  "plugins/teams": "0.14.0",
   "plugins/word": "1.1.0",
   "plugins/powerpoint": "1.1.0",
   "plugins/org-explorer": "1.1.0",
