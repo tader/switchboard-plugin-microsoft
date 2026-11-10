@@ -48,7 +48,8 @@ function target(id) {
     throw fail("invalid_request");
   }
 }
-export function project(raw, conversationId, self) {
+const displayName = value => typeof value === "string" ? value.replace(/[\u0000-\u001f\u007f]/g," ").trim().slice(0,512) || null : null;
+export function project(raw, conversationId, self, observedNames = new Map()) {
   const m = raw.messagetype || raw.messageType ? normalize(raw) : raw;
   const kind = raw.messagetype ?? raw.messageType;
   const restricted = [
@@ -66,6 +67,8 @@ export function project(raw, conversationId, self) {
           ? "available"
           : "unavailable"));
   const parent = m.parentMessageId;
+  const names = new Map(observedNames);
+  if (typeof m.authorId === "string" && displayName(m.author)) names.set(m.authorId,displayName(m.author));
   let reactionMetadataValid=true;
   if(raw.messagetype || raw.messageType){
     let value=raw.properties?.emotions;
@@ -80,7 +83,12 @@ export function project(raw, conversationId, self) {
     authorDisplayName: m.author?.trim().slice(0, 512) || null,
     createdAt: date(m.time),
     isOwn: m.authorId && self ? m.authorId === self : null,
-    ...(reactionMetadataValid && Array.isArray(m.reactions) ? {reactions:m.reactions.filter(r=>typeof r?.key==="string").map(r=>({emoji:REACTION_EMOJI[r.key]??`:${r.key}:`,count:Array.isArray(r.users)?r.users.length:null,me:Array.isArray(r.users)&&self?r.users.some(u=>u?.mri===self):null}))}:{}),
+    ...(reactionMetadataValid && Array.isArray(m.reactions) ? {reactions:m.reactions.filter(r=>typeof r?.key==="string"&&(!Array.isArray(r.users)||r.users.length>0)).map(r=>{
+      const users=Array.isArray(r.users)?r.users.filter(u=>typeof u?.mri==="string"&&u.mri.length>0&&u.mri.length<=2048):null;
+      const valid=users&&users.length===r.users.length&&new Set(users.map(u=>u.mri)).size===users.length;
+      return {emoji:REACTION_EMOJI[r.key]??`:${r.key}:`,count:Array.isArray(r.users)?r.users.length:null,me:users&&self?(users.some(u=>u.mri===self)?true:valid?false:null):null,
+        ...(users?{users:users.slice(0,100).map(u=>({id:u.mri,displayName:displayName(u.displayName)??names.get(u.mri)??null})),usersComplete:!!valid&&users.length<=100}: {})};
+    })}:{}),
     contentState: state,
     contentType:
       kind && !/^(Text|RichText(?:\/.*)?)$/.test(kind) ? "system" : "text",
@@ -241,8 +249,16 @@ export function createMessaging(root) {
         : undefined,
       raw = await request(ctx, route, { limit, cursor });
     const self = "8:orgid:" + ctx.connection.credentials.identity.oid;
+    const observedNames = new Map();
+    const selfName = displayName(ctx.connection.credentials.identity.name);
+    if (selfName) observedNames.set(self,selfName);
+    for (const rawMessage of raw.items) {
+      const item = rawMessage.messagetype || rawMessage.messageType ? normalize(rawMessage) : rawMessage;
+      const name = displayName(item.author);
+      if (typeof item.authorId === "string" && name) observedNames.set(item.authorId,name);
+    }
     return {
-      items: raw.items.map((m) => project(m, input.conversationId, self)),
+      items: raw.items.map((m) => project(m, input.conversationId, self, observedNames)),
       ...(raw.nextCursor
         ? { nextCursor: await cursors.encode(bind, raw.nextCursor) }
         : {}),

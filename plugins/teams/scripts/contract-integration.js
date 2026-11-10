@@ -5,7 +5,7 @@ import path from "node:path";
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
-import { fixture, chatId } from "../test/contracts-fixture.js";
+import { fixture, chatId, oid } from "../test/contracts-fixture.js";
 const core = process.env.SWITCHBOARD_ROOT;
 assert(core, "Set SWITCHBOARD_ROOT");
 const root = path.resolve(core),
@@ -150,6 +150,11 @@ try {
   const reaction={conversationId:chatId,messageId:"100",emoji:"👍",remove:false};
   for(let n=0;n<2;n++){const response=await call("messaging.reactions.update",reaction,"reaction-contract");assert.equal(response.status,200);assert.equal((await response.json()).status,"accepted");}
   assert.equal(f.requests.filter(x=>x.options.method==="PUT"&&x.url.includes("name=emotions")).length,1);
+  const observedResponse=await call("messaging.messages.list",{conversationId:chatId});
+  assert.equal(observedResponse.status,200);
+  const observed=await observedResponse.json();
+  assert.deepEqual(observed.items.find(item=>item.id==="100").reactions[0].users,[{id:"8:orgid:"+oid,displayName:"Fixture"}]);
+  assert.equal(observed.items.find(item=>item.id==="100").reactions[0].usersComplete,true);
   f.failSend(true);
   for (let n = 0; n < 2; n++)
     assert.equal(
