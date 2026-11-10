@@ -68,3 +68,8 @@ exact `48:notes` / `streamofnotes` identity. Reads and send preparation revalida
 it through the authenticated `ME` endpoint; callers cannot supply another user's
 notes stream. Other system streams are excluded. No conversation is created as a
 side effect of discovery.
+
+Reaction users preserve the IDs Teams returns. Display names use names already
+observed in the message page or authenticated account; unresolved identities
+remain unnamed. Truncated or malformed user lists report incomplete coverage,
+and empty provider reaction entries are not displayed as active reactions.
