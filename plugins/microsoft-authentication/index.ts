@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { PluginContext, Connection, AuthMethod, AuthenticationProfile } from './types/api.d.ts';
+import { browserAuthorization } from './lib/browser-presentation.js';
 import { acquireBrowserRefresh } from './lib/browser.js';
 import { FORMAT, GRAPH, TEAMS_CLIENT_ID, RESOURCES, fresh, refresh, identify, validateBundle, fail, type Bundle } from './lib/session.js';
 
@@ -13,7 +14,7 @@ const profilePath = (root: string, id: string) => {
   return path.join(root, 'profiles', id);
 };
 
-export default function setup(ctx: PluginContext) {
+export default function setup(ctx: PluginContext, { captureBrowser = acquireBrowserRefresh } = {}) {
   const pending = new Map<string, PendingFlow>();
   const controllers = new Set<AbortController>();
   async function cancelPending(id: string) {
@@ -22,7 +23,7 @@ export default function setup(ctx: PluginContext) {
     if (flow.newProfile && !flow.coreProfile) await fs.rm(profilePath(ctx.dataDir, flow.profile), {recursive:true,force:true});
   }
   async function capture(profile: string, silent: boolean, previous?: Bundle, signal?: AbortSignal, shared?: AuthenticationProfile) {
-    const captured = await acquireBrowserRefresh(profilePath(ctx.dataDir, profile), { silent, browserPath: ctx.settings.browserPath, signal, sharedProfile: shared });
+    const captured = await captureBrowser(profilePath(ctx.dataDir, profile), { silent, browserPath: ctx.settings.browserPath, signal, sharedProfile: shared });
     if (previous && (previous.identity.tenant !== captured.identity.tenant || previous.identity.oid !== captured.identity.oid)) throw fail('account_mismatch', 'Sign in with the existing Microsoft account.', 403);
     return refresh(captured, { signal });
   }
@@ -47,23 +48,25 @@ export default function setup(ctx: PluginContext) {
     description: 'Sign in to Teams web for a shared Microsoft session. The browser closes after authentication. API access uses cached credentials and HTTP renewal.',
     browserProfile: ctx.browserProfiles ? { browserPath: ctx.settings.browserPath, browserFamily: 'edge', legacyPath: conn => `profiles/${path.basename(profilePath(ctx.dataDir, conn.credentials.profile))}/auth-browser` } : undefined,
     fields: [],
+    unavailable: ctx.capabilities?.deviceBrowser ? undefined : 'Upgrade Switchboard to use browser sign-in.',
     async cancel(state) { await cancelPending(state?.id); },
     async connect({ connection, browserProfile }) {
+      const device = browserAuthorization(ctx.capabilities);
       const profile = connection?.credentials?.profile ?? randomUUID();
       const id = randomUUID(), controller = new AbortController(); controllers.add(controller);
       const flow: PendingFlow = { profile, controller, expires: Date.now() + 600_000, newProfile: !connection, coreProfile: !!browserProfile };
       pending.set(id, flow);
       flow.work = (async () => {
         let bundle: Bundle;
-        try { bundle = await capture(profile, true, connection?.credentials?.bundle, controller.signal, browserProfile); }
+        try { bundle = await capture(profile, !!browserProfile, connection?.credentials?.bundle, controller.signal, browserProfile); }
         catch (error: any) {
-          if (controller.signal.aborted || error.code === 'account_mismatch') throw error;
+          if (!browserProfile || controller.signal.aborted || error.code === 'account_mismatch') throw error;
           bundle = await capture(profile, false, connection?.credentials?.bundle, controller.signal, browserProfile);
         }
         flow.account = await identify(bundle, { signal: controller.signal });
         flow.result = { profile, bundle, ...(browserProfile ? { coreProfile: true } : {}) };
       })().catch(error => { flow.error = error; }).finally(() => controllers.delete(controller));
-      return { device: ctx.capabilities?.deviceBrowser ? { browser: true, instructions: 'Waiting for this browser profile. Sign-in first runs headlessly; complete any requested sign-in in the browser on this device. You can cancel while waiting.', expiresIn: 600, interval: 3 } : { userCode: 'LOCAL-BROWSER', verificationUri: 'https://teams.microsoft.com/v2/', expiresIn: 600, interval: 3 }, pending: { id } };
+      return { device: browserProfile ? { ...device, instructions: 'Waiting for this browser profile. Sign-in first runs headlessly; complete any requested sign-in in the browser on this device. You can cancel while waiting.' } : device, pending: { id } };
     },
     async poll({ pending: state }) {
       const flow = pending.get(state.id);
@@ -97,7 +100,7 @@ export default function setup(ctx: PluginContext) {
   const prune = setInterval(() => { for (const [id, flow] of pending) if (flow.expires < Date.now()) { void cancelPending(id).catch(() => {}); } }, 30_000); prune.unref();
   return {
     services: [{ id: 'microsoft-authentication', name: 'Microsoft Authentication', description: 'Browser authentication for Microsoft API connections on this device and trusted peers.', icon: 'icon.svg', baseUrl: GRAPH, allowedHosts: ['graph.microsoft.com'], authMethods: [method] }],
-    exports: { createConsumerAuth, baseUrl, backend, outlookSpec, webSession: { format: FORMAT, teamsClientId: TEAMS_CLIENT_ID, resources: RESOURCES, validateBundle, identify, refresh, fresh, fail } },
+    exports: { createConsumerAuth, baseUrl, backend, outlookSpec, webSession: { browserAuthorization: (expiresIn?: number) => browserAuthorization(ctx.capabilities, expiresIn), format: FORMAT, teamsClientId: TEAMS_CLIENT_ID, resources: RESOURCES, validateBundle, identify, refresh, fresh, fail } },
     async dispose() { clearInterval(prune); for (const controller of controllers) controller.abort(); await Promise.allSettled([...pending.keys()].map(cancelPending)); pending.clear(); },
   };
 }

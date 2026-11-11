@@ -1,6 +1,16 @@
 import { AdapterError } from './errors.js';
 
-export async function requestJSON(url, options = {}, fetcher = fetch) {
+export const DEFAULT_MAX_RESPONSE_MIB = 8;
+
+export function maxResponseMiB(value) {
+  if (typeof value !== 'number' && (typeof value !== 'string' || !/^\d+$/.test(value.trim()))) return DEFAULT_MAX_RESPONSE_MIB;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 && n <= 256 ? n : DEFAULT_MAX_RESPONSE_MIB;
+}
+
+export async function requestJSON(url, { maxResponseMiB: limit = DEFAULT_MAX_RESPONSE_MIB, ...options } = {}, fetcher = fetch) {
+  // Enforce the cap here as well as at the plugin settings boundary.
+  limit = maxResponseMiB(limit);
   let response;
   const timeout = AbortSignal.timeout(20_000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
@@ -11,7 +21,7 @@ export async function requestJSON(url, options = {}, fetcher = fetch) {
     if (response.status === 401) throw new AdapterError('api_unauthorized', 'Teams rejected the token. Renew authentication.', 401);
     if (response.status === 403) throw new AdapterError('api_forbidden', 'Teams denied this operation.', 403);
     if (response.status === 404) throw new AdapterError('api_not_found', 'Teams could not find this resource.', 404);
-    if (response.status === 429) throw new AdapterError('api_rate_limited', 'Teams rate limit reached. Try again later.', 429);
+    if (response.status === 429) throw Object.assign(new AdapterError('api_rate_limited', 'Teams rate limit reached. Try again later.', 429),{retryAfterMs:Math.min(86400000,Math.max(1000,(Number(response.headers.get('retry-after'))||60)*1000))});
     throw new AdapterError('api_response_failed', `Teams API returned HTTP ${response.status}.`, 502);
   }
   if (!response.body) return null;
@@ -20,7 +30,7 @@ export async function requestJSON(url, options = {}, fetcher = fetch) {
     while (true) {
       const { done, value } = await reader.read(); if (done) break;
       size += value.length;
-      if (size > 8 * 1024 * 1024) throw new AdapterError('api_response_too_large', 'Teams response exceeded 8 MiB.', 502);
+      if (size > limit * 1024 * 1024) throw new AdapterError('api_response_too_large', `Teams response exceeded ${limit} MiB. Raise the maximum response size in the Teams plugin settings.`, 502);
       chunks.push(value);
     }
   } catch (error) { await reader.cancel().catch(() => {}); throw error instanceof AdapterError ? error : new AdapterError('api_transport_failed', 'Teams response was interrupted.', 502); }

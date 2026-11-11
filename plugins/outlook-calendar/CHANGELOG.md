@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.1](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-calendar-v1.3.0...outlook-calendar-v1.3.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **outlook-calendar:** accept bounded OData pagination selectors ([#27](https://github.com/tader/switchboard-plugin-microsoft/issues/27)) ([042e521](https://github.com/tader/switchboard-plugin-microsoft/commit/042e52151e705542c3b12b57d127986241f782f0))
+
+## [1.3.0](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-calendar-v1.2.0...outlook-calendar-v1.3.0) (2026-11-04)
+
+
+### Features
+
+* add common Calendar and Outlook Email contracts ([#25](https://github.com/tader/switchboard-plugin-microsoft/issues/25)) ([8b4e36b](https://github.com/tader/switchboard-plugin-microsoft/commit/8b4e36ba8afa5751eee3b07fc074d8b26ac21ff2))
+
 ## [1.2.0](https://github.com/tader/switchboard-plugin-microsoft/compare/outlook-calendar-v1.1.0...outlook-calendar-v1.2.0) (2026-10-16)
 
 

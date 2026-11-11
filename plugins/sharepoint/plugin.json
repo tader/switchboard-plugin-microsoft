@@ -1,0 +1,13 @@
+{
+  "id": "sharepoint",
+  "name": "SharePoint",
+  "version": "1.1.0",
+  "description": "Sites, pages, lists and document libraries in SharePoint.",
+  "dependencies": [
+    "microsoft"
+  ],
+  "icon": "icon.svg",
+  "dependencyVersions": {
+    "microsoft": "^1.3.0"
+  }
+}

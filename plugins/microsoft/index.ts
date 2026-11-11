@@ -1,3 +1,4 @@
+import { createSharePointDownload } from './content/sharepoint-download.js';
 import { createContentPlugin } from './content/service.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -112,5 +113,5 @@ export default function setup(ctx: PluginContext) {
     ],
   });
 
-  return { services: [graph], exports: { microsoftService, spec, createContentPlugin } };
+  return { services: [graph], exports: { microsoftService, spec, createContentPlugin, createSharePointDownload } };
 }

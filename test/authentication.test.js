@@ -216,3 +216,143 @@ test('profile capability is optional and core-owned authentication data survives
     await oldMethod.revoke({credentials:{profile}});await assert.rejects(fs.access(source));
   } finally {await legacy.dispose();await modern.dispose();await fs.rm(dir,{recursive:true,force:true});}
 });
+
+test('browser sign-in returns instructions and reports capture errors through polling without fake device codes', async () => {
+  let captures = 0;
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+    captureBrowser: async () => { captures++; throw new Error('fixture browser launch failed'); },
+  });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    assert.equal(method.unavailable, undefined);
+    const flow = await method.connect({ config: {} });
+    assert.equal(flow.device.browser, true);
+    assert.match(flow.device.instructions, /open automatically on the computer running this Switchboard/);
+    assert.equal(flow.device.userCode, undefined);
+    assert.equal(flow.device.verificationUri, undefined);
+    await new Promise(resolve => setImmediate(resolve));
+    await assert.rejects(method.poll({ pending: flow.pending }), /fixture browser launch failed/);
+    assert.equal(captures, 1, 'explicit sign-in opens one interactive browser without a hidden attempt');
+    await assert.rejects(method.poll({ pending: flow.pending }), { code: 'signin_expired' });
+  } finally { plugin.dispose(); }
+});
+
+test('old cores receive an upgrade requirement before Microsoft launches a browser', async () => {
+  let captures = 0;
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {} }, { captureBrowser: async () => { captures++; } });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    assert.match(method.unavailable, /Upgrade Switchboard/);
+    await assert.rejects(method.connect({ config: {} }), { code: 'core_upgrade_required' });
+    assert.equal(captures, 0);
+  } finally { plugin.dispose(); }
+});
+
+test('new sign-in and reconnect open the interactive browser and complete normally', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async url => String(url).includes('/token')
+    ? response({ access_token: 'fixture-access', refresh_token: 'fixture-renewed', token_type: 'Bearer', expires_in: 3600, scope: `${graph}/User.Read` })
+    : response({ id: oid, mail: 'fixture@example.test' });
+  try {
+    for (const reconnect of [false, true]) {
+      const captures = [];
+      const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+        captureBrowser: async (_directory, options) => {
+          captures.push(options.silent);
+          return bundle();
+        },
+      });
+      try {
+        const method = plugin.services[0].authMethods[0];
+        const profile = '44444444-4444-4444-8444-444444444444';
+        const flow = await method.connect({ config: {}, ...(reconnect ? { connection: { credentials: { profile, bundle: bundle() } } } : {}) });
+        assert.equal(flow.device.browser, true);
+        let result;
+        for (let i = 0; i < 20; i++) {
+          result = await method.poll({ pending: flow.pending });
+          if (!result.wait) break;
+          await new Promise(resolve => setImmediate(resolve));
+        }
+        assert.equal(result.account.id, `${tenant}:${oid}`);
+        assert.equal(result.credentials.bundle.refreshToken, 'fixture-renewed');
+        assert.deepEqual(captures, [false]);
+        if (reconnect) assert.equal(result.credentials.profile, profile);
+      } finally { plugin.dispose(); }
+    }
+  } finally { globalThis.fetch = original; }
+});
+
+test('browser sign-in expiry stays bounded and disposal aborts the browser capture', async t => {
+  let signal;
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+    captureBrowser: async (_directory, options) => {
+      signal = options.signal;
+      return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(new Error('fixture aborted')), { once: true }));
+    },
+  });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    const flow = await method.connect({ config: {} });
+    assert.deepEqual(await method.poll({ pending: flow.pending }), { wait: true });
+    const future = Date.now() + 600001;
+    t.mock.method(Date, 'now', () => future);
+    await assert.rejects(method.poll({ pending: flow.pending }), { code: 'signin_expired' });
+  } finally { plugin.dispose(); }
+  assert.equal(signal.aborted, true);
+});
+
+
+test('explicit reconnect does not wait for the sixty-second silent sign-in deadline', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const calls = [], profile = '44444444-4444-4444-8444-444444444444';
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+    captureBrowser: async (directory, options) => {
+      calls.push({ directory, silent: options.silent, at: Date.now() });
+      return new Promise((_resolve, reject) => {
+        if (options.silent) setTimeout(() => reject(new Error('fixture silent sign-in expired')), 60_000);
+        options.signal.addEventListener('abort', () => reject(new Error('fixture cancelled')), { once: true });
+      });
+    },
+  });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    const flow = await method.connect({ config: {}, connection: { credentials: { profile, bundle: bundle() } } });
+    assert.deepEqual(calls, [{ directory: path.join('/unused', 'profiles', profile), silent: false, at: 0 }]);
+    assert.deepEqual(await method.poll({ pending: flow.pending }), { wait: true });
+    t.mock.timers.tick(60_000);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(calls.length, 1, 'a delayed second browser must never be opened');
+  } finally {
+    plugin.dispose();
+    await new Promise(resolve => setImmediate(resolve));
+    t.mock.timers.reset();
+  }
+});
+
+test('background recovery stays silent and never opens an interactive fallback', async () => {
+  const calls = [];
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+    captureBrowser: async (_directory, options) => { calls.push(options.silent); throw new Error('fixture requires user interaction'); },
+  });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    await assert.rejects(method.credentialProvider.provide({ credentials: { profile: '44444444-4444-4444-8444-444444444444', bundle: bundle() } }, { forceAuthentication: true }), { code: 'signin_required' });
+    assert.deepEqual(calls, [true]);
+  } finally { plugin.dispose(); }
+});
+
+test('reconnect still refuses to replace the existing account with a different browser identity', async () => {
+  const original = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async () => { throw new Error('Account mismatch must be rejected before token exchange'); };
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+    captureBrowser: async (_directory, options) => { calls.push(options.silent); return { ...bundle(), identity: { tenant, oid: '55555555-5555-4555-8555-555555555555' } }; },
+  });
+  try {
+    const method = plugin.services[0].authMethods[0];
+    const flow = await method.connect({ config: {}, connection: { credentials: { profile: '44444444-4444-4444-8444-444444444444', bundle: bundle() } } });
+    await new Promise(resolve => setImmediate(resolve));
+    await assert.rejects(method.poll({ pending: flow.pending }), { code: 'account_mismatch' });
+    assert.deepEqual(calls, [false]);
+  } finally { plugin.dispose(); globalThis.fetch = original; }
+});

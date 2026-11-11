@@ -239,6 +239,8 @@ export interface AuthMethod {
   fields?: Field[];
   /** When set, the method is shown but cannot be used (e.g. "Not configured by an administrator"). */
   unavailable?: string;
+  /** Keep existing connections usable without offering this legacy method in setup. */
+  hidden?: boolean;
   connect(args: ConnectArgs): Promise<ConnectStep> | ConnectStep;
   /** Completes a redirect flow. `params` are the query parameters the provider returned. */
   callback?(args: ConnectArgs & { pending: any; params: Record<string, string> }): Promise<Connected>;

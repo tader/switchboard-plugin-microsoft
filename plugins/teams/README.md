@@ -8,6 +8,8 @@ Teams setup offers **Use Microsoft Authentication**, with the same authenticatio
 
 To diagnose authentication without reading Teams content, call `getTeamsStatus` with `renew=true`. This renews tokens and returns status only. If a consumer has an expired session, it first obtains the authentication source’s current cached session; another browser sign-in is requested only if that session is also rejected.
 
+For large accounts that exceed the default 8 MiB API response limit, set **Maximum API response size (MiB)** (`maxResponseMiB`) in the Teams plugin settings. Use a whole number from 1 to 256; invalid values use 8. Increase it only as needed: buffering and parsing larger responses uses more memory, especially with concurrent requests.
+
 Legacy standalone documentation and scripts follow for compatibility:
 
 # Teams API plugin for Switchboard
@@ -17,6 +19,11 @@ Version 0.11.0 supports direct Teams private API calls with local browser sign-i
 For unread triage, prefer `getTeamsTriageInbox`, `getTeamsReplyContexts` and `replyTeamsBatch`. The inbox groups chats and channel threads; native quoted chat replies have durable duplicate protection. `setTeamsReadState` marks chat messages read or unread at an exact selected boundary. **Exact-root channel replies are supported; channel read state and automatic read-after-reply remain disabled.** See [triage protocol status](docs/triage-protocol.md).
 
 The service ID remains `teams-web`, and the existing browser authentication method remains `browser`, so existing Switchboard connections can be reconnected in place. The previous DOM adapter is retained in `legacy-index.js` for regression testing; production does not invoke it.
+
+## Shared Messaging contract
+
+See [Messaging v1](docs/messaging-contract.md) for common operations, access settings,
+activity-controlled reconciliation, authentication pauses and integration tests.
 
 ## Install locally
 
@@ -29,7 +36,7 @@ npm run install:local -- ~/switchboard/.data
 
 The installer stages code outside the plugin watcher, replaces `.data/plugins/teams-web`, and saves the previous code under `.data/plugin-backups/`. It does not change connection records, encrypted credentials, or `.data/plugin-data/teams-web`. Reload or restart Switchboard after installing. For stable installations, select the `plugins/teams` folder and **Latest release version**.
 
-In Switchboard, reconnect the existing Teams connection once (or add a new Teams connection). Choose Microsoft sign-in through local Chrome, or Import Teams tokens for a browser-free host (see below). For browser sign-in, enter your work email as the optional Microsoft work email hint. Complete sign-in in the dedicated browser window; it closes automatically when authentication finishes. `LOCAL-BROWSER` is only a placeholder in the connection dialog.
+In Switchboard, reconnect the existing Teams connection once (or add a new Teams connection). Choose Microsoft sign-in through local Chrome, or Import Teams tokens for a browser-free host (see below). For browser sign-in, enter your work email as the optional Microsoft work email hint. Complete sign-in in the dedicated browser window; it closes automatically when authentication finishes. The connection dialog shows browser sign-in instructions without a device code.
 
 Old DOM-only connections report `signin_required` until reconnected. Refresh chat/channel IDs by listing them again; exact legacy thread IDs can migrate after a membership check, but UI search, person and history cursors cannot. Existing send ledger entries remain preserved; a reused key with changed request semantics is rejected.
 
