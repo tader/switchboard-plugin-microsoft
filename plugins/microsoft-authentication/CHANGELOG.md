@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-authentication-v1.2.0...microsoft-authentication-v1.3.0) (2026-11-11)
+
+
+### Features
+
+* support shared authentication browser profiles ([b984c4e](https://github.com/tader/switchboard-plugin-microsoft/commit/b984c4e39270beea4cd90aa847c6cfff1ffc3cda))
+* support shared authentication browser profiles ([#46](https://github.com/tader/switchboard-plugin-microsoft/issues/46)) ([b59588e](https://github.com/tader/switchboard-plugin-microsoft/commit/b59588e37543397e02e10641eaa7f21f6a691cae))
+
 ## [1.2.0](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-authentication-v1.1.4...microsoft-authentication-v1.2.0) (2026-11-10)
 
 
