@@ -59,7 +59,9 @@ export interface PluginContext {
   /** True when this instance has a peer connection configured. */
   peer: boolean;
   /** Optional for compatibility with older Switchboard instances. */
-  capabilities?: { deviceQr?: boolean; deviceUpdates?: boolean; deviceBrowser?: boolean };
+  capabilities?: { deviceQr?: boolean; deviceUpdates?: boolean; deviceBrowser?: boolean; browserProfiles?: boolean };
+  /** Backend-only authentication browser access, scoped to this plugin’s connections. */
+  browserProfiles?: { forConnection(connection: Connection): AuthenticationProfile };
   /** Core MCP OAuth discovery and encrypted connect-flow integration. */
   mcp: { oauth(): AuthMethod };
   /** Backend-only, bound to the acting user and consumer source selection. */
@@ -76,7 +78,7 @@ export interface PluginInstance {
 export type PluginSetup = (ctx: PluginContext) => PluginInstance | Promise<PluginInstance>;
 
 export interface AccountInfo {
-  /** Stable id at the provider. Reconnecting the same account updates the existing connection. */
+  /** Stable id at the provider. New browser-profile connections remain independent. */
   id?: string;
   /** Human readable, e.g. an email address or username. */
   label: string;
@@ -90,6 +92,8 @@ export interface Connection {
   /** Omitted by older plugins; defaults to HTTP. */
   kind?: ConnectionKind;
   id: string;
+  /** Core-owned local authentication profile; never part of credential bundles. */
+  browserProfileId?: string;
   name: string;
   serviceId: string;
   methodId: string;
@@ -165,6 +169,7 @@ export interface ConnectArgs {
   state: string;
   /** Set when re-authenticating an existing connection. */
   connection?: Connection;
+  browserProfile?: AuthenticationProfile;
 }
 
 export interface TokenResult {
@@ -200,7 +205,28 @@ export interface CredentialProvider {
   format: string;
   provide(conn: Connection, opts: { forceAuthentication: boolean; signal?: AbortSignal; persistCredentials(credentials: any): void | Promise<void> }): Promise<Omit<CredentialBundle, 'format'> & { credentials?: any }>;
 }
+/** Private pipe control, available only for the duration of run(). No TCP endpoint. */
+export interface AuthenticationBrowser {
+  call(method: string, params?: any, sessionId?: string, timeout?: number): Promise<any>;
+  subscribe(listener: (event: any) => void): () => void;
+  page(url: string, browserContextId?: string): Promise<AuthenticationPage>;
+  exit: Promise<unknown>;
+}
+export interface AuthenticationPage {
+  sessionId: string; targetId: string;
+  call(method: string, params?: any, timeout?: number): Promise<any>;
+}
+export interface AuthenticationProfile {
+  id: string;
+  /** Serializes with every other plugin using this profile, including while waiting. */
+  run<T>(options: { headless: boolean; browserPath?: string; signal?: AbortSignal; timeoutMs?: number }, operation: (browser: AuthenticationBrowser, signal: AbortSignal) => Promise<T>): Promise<T>;
+}
+
 export interface AuthMethod {
+  /** Opt in only for host-local browser authentication. Paths are relative to plugin dataDir. */
+  browserProfile?: { legacyPath?(connection: Connection): string | undefined; browserPath?: string; browserFamily?: 'chrome' | 'edge' };
+  /** Release pending plugin resources when a connect flow is cancelled or expires. */
+  cancel?(pending: any): void | Promise<void>;
   /** Sharing API access never implies sharing credentials. Providers require an explicit peer credential grant. */
   credentialProvider?: CredentialProvider;
   credentialConsumer?: { format: string; field: string };
@@ -231,7 +257,9 @@ export interface AuthMethod {
   authenticateWebSocket?(channel: WebSocketChannel, conn: Connection, opts: { force: boolean; signal: AbortSignal }): Promise<void | { credentials?: any }>;
   /** Hands out a usable bearer token, for scripts that use a provider SDK directly. */
   token?(conn: Connection, opts: { force?: boolean; signal?: AbortSignal; persistCredentials?: (credentials: any) => void | Promise<void> }): Promise<TokenResult>;
-  /** Called when the connection is deleted. */
+  /** Optional deletion precondition. Unlike revoke, failures prevent deletion. */
+  beforeDelete?(conn: Connection): Promise<void> | void;
+  /** Called when the connection is deleted. Never remove core-owned browser data. */
   revoke?(conn: Connection): Promise<void>;
 }
 

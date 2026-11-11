@@ -58,3 +58,24 @@ Microsoft Authentication now signs into Teams web by default. Live validation co
 Previously cached Outlook sign-ins continue to work for Outlook and Graph, but Teams rejects their chat authorization with `410 ApiRestricted`. Reconnect the source once using Teams sign-in to enable the whole family. The source never changes a refresh token's issuing client ID or origin. Graph permissions differ between the Outlook and Teams web clients; only already-granted permissions are used. Some Outlook operations still require the native Outlook backend (for example Mail.Send), with the compatibility limits described above.
 
 Word and PowerPoint use Graph file transfer and server-side Open XML editing with version checks, rather than a live Office session. Org Explorer uses the existing Graph directory grants for read-only people and hierarchy queries. These three services use the same authentication source; they do not request new permissions.
+
+### Reusable local browser profiles
+
+On a core supporting browser profiles, each new authentication connection gets an
+independent profile. Select an existing profile explicitly during creation to reuse
+saved SSO sign-ins, optionally naming it **Work**. The connection actions show profile
+usage and allow renaming. Reconnect retains the original profile. Saved sign-ins are
+local to one user and device; only explicitly granted API credential bundles can
+cross peers. Disconnecting the last referencing connection deletes the profile.
+
+Existing `profiles/<uuid>/auth-browser` sign-ins are registered separately without
+changing them. First reuse copies the selected profile into core storage after its
+browser closes; the original remains as a recovery backup until last-reference
+cleanup. Core owns the private-pipe browser lifecycle and serializes authentication
+across plugins. Acquisition first runs headlessly, then visibly when interaction is
+needed. You can cancel a queued sign-in. Token capture uses an ephemeral app context
+with in-memory SSO cookies, preserving shared caches and account mismatch guards.
+HTTP renewal and encrypted API credentials remain separate from browser storage.
+Browser disk data is sensitive and uses browser/OS protection; protect its backups.
+Upstream MFA and access policies may still require interaction. Older cores retain
+the plugin's independent browser implementation.

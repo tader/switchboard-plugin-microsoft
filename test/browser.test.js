@@ -53,3 +53,33 @@ test('Teams capture accepts only the Teams client paired with a Teams origin', a
     await assert.rejects(captureRefreshResponse(wrong.page, wrong.cdp, { app: 'teams', timeout: 5 }), { code: 'refresh_capture_timeout' });
   }
 });
+
+test('core profile uses an ephemeral app context, preserves shared storage, and disposes it', async () => {
+  const { acquireBrowserRefresh } = await import('../plugins/microsoft-authentication/lib/browser.js');
+  const f = fixture({ clientId: '5e3ce6c0-2b1f-4285-8d4b-75ee78787346', origin: 'https://teams.microsoft.com' });
+  const calls = [];
+  f.cdp.call = async (method, args) => {
+    calls.push([method, args]);
+    if(method==='Target.createBrowserContext') return {browserContextId:'isolated'};
+    if(method==='Storage.getCookies') return {cookies:[{name:'sso',value:'synthetic',domain:'login.microsoftonline.com',path:'/',size:10,session:true}]};
+    return {};
+  };
+  f.cdp.page = async (url, context) => { assert.equal(context,'isolated'); return f.page; };
+  let options;
+  const sharedProfile={run:async(o,fn)=>{options=o;return fn(f.cdp,new AbortController().signal);}};
+  const value=await acquireBrowserRefresh('/unused',{silent:true,sharedProfile});
+  assert.equal(value.refreshToken,'fixture-refresh-secret');assert.equal(options.headless,true);
+  assert.ok(!calls.some(([method])=>method==='Storage.clearDataForOrigin'));
+  assert.equal(calls.filter(([method])=>method==='Storage.setCookies').length,2);
+  assert.equal(calls.filter(([method])=>method==='Storage.setCookies')[0][1].cookies[0].size,undefined);
+  assert.deepEqual(calls.at(-1),['Target.disposeBrowserContext',{browserContextId:'isolated'}]);
+});
+
+test('core temporary context is disposed when acquisition is cancelled', async () => {
+  const { acquireBrowserRefresh }=await import('../plugins/microsoft-authentication/lib/browser.js');
+  const f=fixture(),calls=[]; const controller=new AbortController();
+  f.cdp.call=async method=>{calls.push(method);if(method==='Target.createBrowserContext')return {browserContextId:'isolated'};if(method==='Storage.getCookies')return {cookies:[]};return {};};
+  f.cdp.page=async()=>{controller.abort();return f.page;};
+  await assert.rejects(acquireBrowserRefresh('/unused',{silent:true,sharedProfile:{run:(_,fn)=>fn(f.cdp,controller.signal)}}),{code:'refresh_check_cancelled'});
+  assert.equal(calls.at(-1),'Target.disposeBrowserContext');assert.equal(f.listeners.size,0);
+});

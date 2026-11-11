@@ -147,10 +147,27 @@ export async function captureRefreshResponse(page, cdp, { signal, timeout = 300_
   });
 }
 
-export async function acquireBrowserRefresh(directory, { silent = false, browserPath, signal, app = 'teams' } = {}, {
+export async function acquireBrowserRefresh(directory, { silent = false, browserPath, signal, app = 'teams', sharedProfile } = {}, {
   createCDP = (exe, dir, options) => new CDP(exe, dir, options), discoverBrowser = findBrowser,
 } = {}) {
   signal?.throwIfAborted();
+  if (sharedProfile) return sharedProfile.run({ headless: silent, browserPath, signal, timeoutMs: silent ? 75_000 : 330_000 }, async (cdp, signal) => {
+    // An ephemeral app context has no cached access token to conceal the exchange.
+    // Copy cookies in memory for SSO, without clearing any shared profile storage.
+    const { browserContextId } = await cdp.call('Target.createBrowserContext', { disposeOnDetach: true });
+    const cookieParams = cookies => cookies.map(({ size, session, ...cookie }) => cookie);
+    try {
+      const saved = await cdp.call('Storage.getCookies');
+      await cdp.call('Storage.setCookies', { browserContextId, cookies: cookieParams(saved.cookies) });
+      const page = await cdp.page('about:blank', browserContextId);
+      const captured = await captureRefreshResponse(page, cdp, { signal, app, timeout: silent ? 60_000 : 300_000 });
+      // Keep refreshed SSO cookies, including upstream federation, but never remove
+      // storage used by another connection. The temporary app cache is discarded.
+      const updated = await cdp.call('Storage.getCookies', { browserContextId });
+      await cdp.call('Storage.setCookies', { cookies: cookieParams(updated.cookies) });
+      return captured;
+    } finally { await cdp.call('Target.disposeBrowserContext', { browserContextId }).catch(() => {}); }
+  });
   const profile = path.join(directory, 'auth-browser');
   await fs.mkdir(profile, { recursive: true, mode: 0o700 }); await fs.chmod(profile, 0o700);
   const cdp = createCDP(await discoverBrowser(browserPath), profile, { headless: silent });
