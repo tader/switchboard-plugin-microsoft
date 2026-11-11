@@ -204,3 +204,15 @@ test('Outlook forces authentication only after current source renewal also requi
     }
   } finally { globalThis.fetch = original; }
 });
+
+test('profile capability is optional and core-owned authentication data survives revoke', async () => {
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'microsoft-profile-test-'));
+  const profile='11111111-1111-4111-8111-111111111111';const source=path.join(dir,'profiles',profile,'auth-browser');await fs.mkdir(source,{recursive:true});await fs.writeFile(path.join(source,'Cookies'),'synthetic');
+  const legacy=setupAuthentication({dataDir:dir,settings:{}}),modern=setupAuthentication({dataDir:dir,settings:{},browserProfiles:{}});
+  try {
+    const oldMethod=legacy.services[0].authMethods[0],method=modern.services[0].authMethods[0];
+    assert.equal(oldMethod.browserProfile,undefined);assert.equal(method.browserProfile.legacyPath({credentials:{profile}}),`profiles/${profile}/auth-browser`);
+    await method.revoke({browserProfileId:'core-owned',credentials:{profile}});assert.equal(await fs.readFile(path.join(source,'Cookies'),'utf8'),'synthetic');
+    await oldMethod.revoke({credentials:{profile}});await assert.rejects(fs.access(source));
+  } finally {await legacy.dispose();await modern.dispose();await fs.rm(dir,{recursive:true,force:true});}
+});
