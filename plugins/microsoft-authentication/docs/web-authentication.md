@@ -72,8 +72,9 @@ Existing `profiles/<uuid>/auth-browser` sign-ins are registered separately witho
 changing them. First reuse copies the selected profile into core storage after its
 browser closes; the original remains as a recovery backup until last-reference
 cleanup. Core owns the private-pipe browser lifecycle and serializes authentication
-across plugins. Acquisition first runs headlessly, then visibly when interaction is
-needed. You can cancel a queued sign-in. Token capture uses an ephemeral app context
+across plugins. Connect and Reconnect open a visible browser as soon as the profile
+is available, without a headless attempt first. Automatic background renewal stays
+silent. You can cancel a queued sign-in. Token capture uses an ephemeral app context
 with in-memory SSO cookies, preserving shared caches and account mismatch guards.
 HTTP renewal and encrypted API credentials remain separate from browser storage.
 Browser disk data is sensitive and uses browser/OS protection; protect its backups.

@@ -341,18 +341,68 @@ test('background recovery stays silent and never opens an interactive fallback',
   } finally { plugin.dispose(); }
 });
 
-test('reconnect still refuses to replace the existing account with a different browser identity', async () => {
-  const original = globalThis.fetch;
-  const calls = [];
-  globalThis.fetch = async () => { throw new Error('Account mismatch must be rejected before token exchange'); };
-  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
-    captureBrowser: async (_directory, options) => { calls.push(options.silent); return { ...bundle(), identity: { tenant, oid: '55555555-5555-4555-8555-555555555555' } }; },
+for (const shared of [undefined, { id: 'synthetic-shared-profile' }]) {
+  test(`reconnect rejects a different browser identity (${shared ? 'shared' : 'legacy'} profile)`, async () => {
+    const original = globalThis.fetch;
+    const calls = [];
+    globalThis.fetch = async () => { throw new Error('Account mismatch must be rejected before token exchange'); };
+    const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true } }, {
+      captureBrowser: async (_directory, options) => { calls.push(options.silent); return { ...bundle(), identity: { tenant, oid: '55555555-5555-4555-8555-555555555555' } }; },
+    });
+    try {
+      const method = plugin.services[0].authMethods[0];
+      const flow = await method.connect({ config: {}, browserProfile: shared, connection: { credentials: { profile: '44444444-4444-4444-8444-444444444444', bundle: bundle() } } });
+      await new Promise(resolve => setImmediate(resolve));
+      await assert.rejects(method.poll({ pending: flow.pending }), { code: 'account_mismatch' });
+      assert.deepEqual(calls, [false]);
+    } finally { await plugin.dispose(); globalThis.fetch = original; }
+  });
+}
+
+test('shared-profile Connect and Reconnect start visibly without a silent deadline', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
+  const profile = '44444444-4444-4444-8444-444444444444';
+  const shared = { id: 'synthetic-shared-profile' };
+  try {
+    for (const reconnect of [false, true]) {
+      const calls = [];
+      let signal;
+      const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true }, browserProfiles: {} }, {
+        captureBrowser: async (_directory, options) => {
+          calls.push({ silent: options.silent, shared: options.sharedProfile, at: Date.now() });
+          signal = options.signal;
+          return new Promise((_resolve, reject) => {
+            if (options.silent) setTimeout(() => reject(new Error('synthetic silent timeout')), 60_000);
+            signal.addEventListener('abort', () => reject(new Error('synthetic cancellation')), { once: true });
+          });
+        },
+      });
+      try {
+        const method = plugin.services[0].authMethods[0];
+        const started = Date.now();
+        const flow = await method.connect({ config: {}, browserProfile: shared, ...(reconnect ? { connection: { credentials: { profile, bundle: bundle() } } } : {}) });
+        assert.deepEqual(calls, [{ silent: false, shared, at: started }]);
+        assert.ok(!flow.device.instructions.includes('headlessly'));
+        assert.deepEqual(await method.poll({ pending: flow.pending }), { wait: true });
+        t.mock.timers.tick(60_000);
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(calls.length, 1);
+        await method.cancel(flow.pending);
+        assert.equal(signal.aborted, true);
+        await assert.rejects(method.poll({ pending: flow.pending }), { code: 'signin_expired' });
+      } finally { await plugin.dispose(); }
+    }
+  } finally { t.mock.timers.reset(); }
+});
+
+test('shared-profile background recovery stays silent', async () => {
+  const shared = { id: 'synthetic-shared-profile' }, calls = [];
+  const plugin = setupAuthentication({ dataDir: '/unused', settings: {}, capabilities: { deviceBrowser: true }, browserProfiles: { forConnection: () => shared } }, {
+    captureBrowser: async (_directory, options) => { calls.push(options); throw new Error('synthetic interaction required'); },
   });
   try {
     const method = plugin.services[0].authMethods[0];
-    const flow = await method.connect({ config: {}, connection: { credentials: { profile: '44444444-4444-4444-8444-444444444444', bundle: bundle() } } });
-    await new Promise(resolve => setImmediate(resolve));
-    await assert.rejects(method.poll({ pending: flow.pending }), { code: 'account_mismatch' });
-    assert.deepEqual(calls, [false]);
-  } finally { plugin.dispose(); globalThis.fetch = original; }
+    await assert.rejects(method.credentialProvider.provide({ browserProfileId: shared.id, credentials: { profile: '44444444-4444-4444-8444-444444444444', bundle: bundle() } }, { forceAuthentication: true }), { code: 'signin_required' });
+    assert.equal(calls.length, 1); assert.equal(calls[0].silent, true); assert.equal(calls[0].sharedProfile, shared);
+  } finally { await plugin.dispose(); }
 });

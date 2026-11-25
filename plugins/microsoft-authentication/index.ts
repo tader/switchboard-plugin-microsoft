@@ -57,16 +57,13 @@ export default function setup(ctx: PluginContext, { captureBrowser = acquireBrow
       const flow: PendingFlow = { profile, controller, expires: Date.now() + 600_000, newProfile: !connection, coreProfile: !!browserProfile };
       pending.set(id, flow);
       flow.work = (async () => {
-        let bundle: Bundle;
-        try { bundle = await capture(profile, !!browserProfile, connection?.credentials?.bundle, controller.signal, browserProfile); }
-        catch (error: any) {
-          if (!browserProfile || controller.signal.aborted || error.code === 'account_mismatch') throw error;
-          bundle = await capture(profile, false, connection?.credentials?.bundle, controller.signal, browserProfile);
-        }
+        // Connect and Reconnect are user actions: launch visibly for shared and
+        // legacy profiles. Background usable() recovery remains silent.
+        const bundle = await capture(profile, false, connection?.credentials?.bundle, controller.signal, browserProfile);
         flow.account = await identify(bundle, { signal: controller.signal });
         flow.result = { profile, bundle, ...(browserProfile ? { coreProfile: true } : {}) };
       })().catch(error => { flow.error = error; }).finally(() => controllers.delete(controller));
-      return { device: browserProfile ? { ...device, instructions: 'Waiting for this browser profile. Sign-in first runs headlessly; complete any requested sign-in in the browser on this device. You can cancel while waiting.' } : device, pending: { id } };
+      return { device: browserProfile ? { ...device, instructions: 'Sign in using the browser on the computer running Switchboard. You can cancel while waiting.' } : device, pending: { id } };
     },
     async poll({ pending: state }) {
       const flow = pending.get(state.id);
