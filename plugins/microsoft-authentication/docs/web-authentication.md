@@ -24,7 +24,7 @@ Pair the laptop and server through Switchboard Peers. On the laptop, open the au
 
 On the server, create a local Microsoft product connection using the shared authentication source. The server receives encrypted-at-rest access and refresh credentials; browser profiles and cookies stay on the laptop. Data requests go directly from the server to Microsoft, including while the laptop is offline.
 
-When HTTP renewal stops working, the server requests fresh authentication from the laptop. The laptop first tries its saved browser profile headlessly. If Microsoft requires interaction, reconnect the authentication connection on the laptop and complete sign-in there. The server retries source acquisition on its next request.
+When HTTP renewal stops working, the server requests fresh authentication from the laptop. The laptop first tries its saved browser profile headlessly. If Microsoft requires interaction, reconnect the authentication connection on the laptop and complete sign-in there. The server retries source acquisition on its next request. If Microsoft rejects a cached access token, the retry checks the selected source for its current session before renewing that API token. Product connections do not need to be reconnected after source sign-in. When the peer is offline, cached HTTP renewal remains available.
 
 Unsharing blocks new transfers and disables linked use once that change reaches the server. Exported Microsoft tokens cannot be recalled from an offline machine. Microsoft session revocation controls the provider's tokens themselves.
 

@@ -96,9 +96,11 @@ export async function refresh(bundle, { fetcher = fetch, signal, onRotate = asyn
   }
   const updated = { ...bundle, refreshToken: value.refresh_token ?? bundle.refreshToken };
   // Retain rotations even if a subsequent Graph check fails. Never persist an unvalidated initial import.
-  if (bundle.format === FORMAT && value.refresh_token) await onRotate(updated);
+  if (resource === 'graph' && bundle.format === FORMAT && value.refresh_token) await onRotate(updated);
   const token = { accessToken: value.access_token, expiresAt: Date.now() + seconds * 1000, scope: value.scope };
   const next = validateBundle(resource === 'graph' ? { ...updated, ...token, format: FORMAT, generation: bundle.generation ?? randomUUID() } : { ...updated, resources: { ...updated.resources, [resource]: token } });
+  // Resource rotations can persist the complete token without a later identity request.
+  if (resource !== 'graph' && bundle.format === FORMAT && value.refresh_token) await onRotate(next);
   // Graph owns its tokens. They may be opaque, or use either Graph audience representation.
   if (resource === 'graph') await identify(next, { fetcher, signal });
   return next;

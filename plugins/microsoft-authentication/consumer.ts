@@ -92,24 +92,39 @@ export function createConsumerAuth(ctx: PluginContext, options: ConsumerOptions)
     const resource = backend(conn);
     const token = resource === 'graph' ? bundle : bundle.resources?.outlook;
     if (!opts.force && token && fresh(token as Bundle)) return bundle;
-    try { bundle = await refresh(bundle, { resource, signal: opts.signal, onRotate: async next => { await opts.persistCredentials?.(next); } }); }
+    let currentSource = false;
+    const renew = () => refresh(bundle, { resource, signal: opts.signal, onRotate: async next => { await opts.persistCredentials?.(next); } });
+    const source = async (forceAuthentication: boolean) => {
+      const supplied = await obtain(conn.config, forceAuthentication, bundle, opts.signal);
+      // Shared credentials may also serve other audiences. Retain their binding
+      // scopes, but expire cached tokens so the new session must renew them.
+      const expiredResources = Object.fromEntries(Object.entries(bundle.resources ?? {}).map(([key, token]) => [key, { ...token, expiresAt: 0 }]));
+      bundle = { ...supplied, resources: { ...expiredResources, ...supplied.resources } };
+      currentSource = true;
+      // A source may not yet contain this consumer's Outlook audience. Keep the
+      // previous durable grant until a complete resource bundle is available.
+      if (resource === 'graph') await opts.persistCredentials?.(bundle);
+    };
+    if (opts.force) {
+      try { await source(false); }
+      catch (error: any) {
+        if (opts.signal?.aborted || error.code !== 'peer_offline') throw error;
+      }
+    }
+    try { bundle = await renew(); }
     catch (error: any) {
       if (!error.reauthenticationRequired) throw error;
-      // A consumer may still hold the session from before the source was reconnected.
-      // Reuse the source's current credentials before requesting browser authentication.
-      bundle = await obtain(conn.config, false, bundle, opts.signal);
-      await opts.persistCredentials?.(bundle);
-      if (resource === 'outlook') {
-        try { bundle = await refresh(bundle, { resource, signal: opts.signal, onRotate: async next => { await opts.persistCredentials?.(next); } }); }
-        catch (retryError: any) {
-          if (!retryError.reauthenticationRequired) throw retryError;
-          bundle = await obtain(conn.config, true, bundle, opts.signal);
-          await opts.persistCredentials?.(bundle);
-          bundle = await refresh(bundle, { resource, signal: opts.signal, onRotate: async next => { await opts.persistCredentials?.(next); } });
-        }
+      if (!currentSource) await source(false);
+      try {
+        if (resource === 'outlook' || opts.force || !fresh(bundle)) bundle = await renew();
+      } catch (retryError: any) {
+        if (!retryError.reauthenticationRequired) throw retryError;
+        await source(true);
+        bundle = await renew();
       }
     }
     if (!coversScopes(grantedScopes(bundle), required(conn.config))) throw fail('permission_unavailable', 'The web session no longer grants the permissions required by this connection.', 403);
+    if (currentSource) await opts.persistCredentials?.(bundle);
     return bundle;
   }
   const changed = (a: Bundle, b: Bundle) => a.accessToken !== b.accessToken || a.refreshToken !== b.refreshToken || a.scope !== b.scope || a.expiresAt !== b.expiresAt || a.generation !== b.generation || a.resources?.outlook?.accessToken !== b.resources?.outlook?.accessToken || a.resources?.outlook?.scope !== b.resources?.outlook?.scope || a.resources?.outlook?.expiresAt !== b.resources?.outlook?.expiresAt;

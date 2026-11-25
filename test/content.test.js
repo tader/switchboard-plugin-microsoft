@@ -303,63 +303,67 @@ test('Org Explorer handles pagination, absent managers, cycles, bounded subtrees
     { code: 'invalid_input' },
   );
 });
-test('adapter exposes no raw-token hook and binds one-use invocations to method/path with read-only enforcement', async () => {
-  const token = {
-      format: 'fixture',
-      accessToken: 'never-return-this',
-      refreshToken: 'private',
-    },
-    auth = {
-      id: 'authentication-source',
-      fields: [],
-      credentialConsumer: { format: 'fixture', field: 'authenticationSource' },
-      connect: async () => ({ credentials: token }),
-      authorize() {},
-      token: async () => ({ accessToken: token.accessToken }),
-    };
-  const plugin = await createContentPlugin(
-    { require: () => ({ createConsumerAuth: () => auth }) },
-    { id: 'word', name: 'Word' },
-    {
-      fetcher: async () => {
-        throw Error('Unexpected API');
+for (const kind of ['word', 'powerpoint', 'org-explorer']) {
+  test(`${kind} adapter forwards recovery options`, async () => {
+    const options = { force: true, signal: new AbortController().signal };
+    const token = {
+        format: 'fixture',
+        accessToken: 'never-return-this',
+        refreshToken: 'private',
       },
-    },
-  );
-  try {
-    const method = plugin.services[0].authMethods[0];
-    assert.equal(method.token, undefined);
-    assert.equal(method.reusable, undefined);
-    const conn = { credentials: token, config: { access: 'read' } },
-      request = {
-        method: 'GET',
-        url: new URL('http://word.localhost/capabilities'),
-        headers: new Headers(),
+      auth = {
+        id: 'authentication-source',
+        fields: [],
+        credentialConsumer: { format: 'fixture', field: 'authenticationSource' },
+        connect: async () => ({ credentials: token }),
+        authorize() {},
+        token: async (_conn, opts) => { assert.equal(opts, options); return { accessToken: token.accessToken }; },
       };
-    await method.authorize(request, conn, {});
-    const result = await fetch(request.url, { headers: request.headers });
-    assert.equal(result.status, 200);
-    assert.equal((await result.json()).kind, 'word');
-    assert.equal(
-      (await fetch(request.url, { headers: request.headers })).status,
-      403,
-    );
-    await assert.rejects(
-      method.authorize(
-        {
-          method: 'POST',
-          url: new URL('http://word.localhost/documents'),
-          headers: new Headers(),
+    const plugin = await createContentPlugin(
+      { require: () => ({ createConsumerAuth: () => auth }) },
+      { id: kind, name: kind },
+      {
+        fetcher: async () => {
+          throw Error('Unexpected API');
         },
-        conn,
-        {},
-      ),
-      { code: 'request_forbidden' },
+      },
     );
-  } finally {
-    await plugin.dispose();
-  }
-});
+    try {
+      const method = plugin.services[0].authMethods[0];
+      assert.equal(method.token, undefined);
+      assert.equal(method.reusable, undefined);
+      const conn = { credentials: token, config: { access: 'read' } },
+        request = {
+          method: 'GET',
+          url: new URL(`http://${kind}.localhost/capabilities`),
+          headers: new Headers(),
+        };
+      await method.authorize(request, conn, options);
+      if (kind === 'org-explorer') return;
+      const result = await fetch(request.url, { headers: request.headers });
+      assert.equal(result.status, 200);
+      assert.equal((await result.json()).kind, kind);
+      assert.equal(
+        (await fetch(request.url, { headers: request.headers })).status,
+        403,
+      );
+      await assert.rejects(
+        method.authorize(
+          {
+            method: 'POST',
+            url: new URL('http://word.localhost/documents'),
+            headers: new Headers(),
+          },
+          conn,
+          {},
+        ),
+        { code: 'request_forbidden' },
+      );
+    } finally {
+      await plugin.dispose();
+    }
+  });
+}
 
 test('deleting a slide removes its XML and notes rather than retaining hidden text', () => {
   const bytes = createPowerPoint({
