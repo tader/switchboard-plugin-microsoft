@@ -406,3 +406,61 @@ test('shared-profile background recovery stays silent', async () => {
     assert.equal(calls.length, 1); assert.equal(calls[0].silent, true); assert.equal(calls[0].sharedProfile, shared);
   } finally { await plugin.dispose(); }
 });
+
+for (const [id, backend, scope] of [['sharepoint', 'graph', 'Sites.Read.All'], ['outlook-calendar', 'graph', 'Calendars.Read'], ['outlook-mail', 'outlook', 'Mail.ReadWrite']]) {
+  test(`${id} forced retry adopts the current source session`, async () => {
+    const original = globalThis.fetch, calls = [], saved = [];
+    const resource = backend === 'graph' ? graph : outlook;
+    const current = { ...bundle(), refreshToken: 'new-session', scope: `${graph}/User.Read ${graph}/${scope}` };
+    globalThis.fetch = async (url, opts) => {
+      if (!String(url).includes('/token')) return response({ id: oid });
+      assert.equal(opts.body.get('refresh_token'), 'new-session');
+      return response({ access_token: 'new-resource', refresh_token: 'rotated-session', token_type: 'Bearer', expires_in: 3600, scope: `${graph}/User.Read ${resource}/${scope}` });
+    };
+    try {
+      const method = createConsumerAuth({ credentials: { obtain: async (ref, opts) => { calls.push(opts.forceAuthentication); return { format: FORMAT, bundle: current, account: { id: `${tenant}:${oid}` } }; } } }, { id, scopes: [scope] });
+      const result = await method.token({ methodId: method.id, config: { authenticationSource: 'synthetic-peer', backend }, credentials: { ...bundle(), resources: { outlook: { accessToken: 'cached-outlook', expiresAt: Date.now() + 3600000, scope: `${outlook}/Mail.ReadWrite` } } } }, { force: true, persistCredentials: value => saved.push(value) });
+      assert.equal(result.accessToken, 'new-resource'); assert.deepEqual(calls, [false]);
+      if (backend === 'outlook') assert.ok(saved.every(value => value.resources?.outlook?.accessToken === 'new-resource'));
+      else { assert.equal(result.credentials.resources.outlook.expiresAt, 0); assert.equal(result.credentials.resources.outlook.scope, `${outlook}/Mail.ReadWrite`); }
+    } finally { globalThis.fetch = original; }
+  });
+}
+
+test('failed Outlook acquisition preserves durable permissions and recovers on the next request', async () => {
+  const original = globalThis.fetch;
+  let transient = true;
+  const stale = { ...bundle(), refreshToken: 'stale', resources: { outlook: { accessToken: 'expired', expiresAt: 0, scope: `${outlook}/Mail.ReadWrite` } } };
+  let durable = stale;
+  globalThis.fetch = async (url, opts) => {
+    if (!String(url).includes('/token')) return response({ id: oid });
+    if (opts.body.get('refresh_token') === 'stale') return response({ error: 'invalid_grant' }, 400);
+    if (transient) return response({ error: 'temporarily_unavailable' }, 503);
+    return response({ access_token: 'recovered', refresh_token: 'rotated', token_type: 'Bearer', expires_in: 3600, scope: `${outlook}/Mail.ReadWrite` });
+  };
+  try {
+    const method = createConsumerAuth({ credentials: { obtain: async () => ({ format: FORMAT, bundle: bundle(), account: { id: `${tenant}:${oid}` } }) } }, { id: 'outlook-mail', scopes: ['Mail.ReadWrite'] });
+    const invoke = () => method.token({ methodId: method.id, config: { backend: 'outlook', authenticationSource: 'synthetic-peer' }, credentials: durable }, { persistCredentials: value => { durable = value; } });
+    await assert.rejects(invoke(), { code: 'refresh_rejected' });
+    assert.equal(durable, stale);
+    transient = false;
+    assert.equal((await invoke()).accessToken, 'recovered');
+    assert.equal(durable.refreshToken, 'rotated');
+    assert.equal(durable.resources.outlook.accessToken, 'recovered');
+  } finally { globalThis.fetch = original; }
+});
+
+for (const code of ['peer_offline', 'account_mismatch', 'cancelled', 'permission_denied']) {
+  test(`forced retry only falls back for peer_offline (${code})`, async () => {
+    const original = globalThis.fetch;
+    let exchanges = 0;
+    globalThis.fetch = async () => { exchanges++; return response({ access_token: 'offline-renewal', token_type: 'Bearer', expires_in: 3600, scope: `${graph}/User.Read ${outlook}/Mail.ReadWrite` }); };
+    try {
+      const method = createConsumerAuth({ credentials: { obtain: async () => { throw Object.assign(new Error('synthetic rejection'), { code }); } } }, { id: 'outlook-mail', scopes: ['Mail.ReadWrite'] });
+      const result = method.token({ methodId: method.id, config: { backend: 'outlook', authenticationSource: 'synthetic-peer' }, credentials: bundle() }, { force: true });
+      if (code === 'peer_offline') assert.equal((await result).accessToken, 'offline-renewal');
+      else await assert.rejects(result, { code });
+      assert.equal(exchanges, code === 'peer_offline' ? 1 : 0);
+    } finally { globalThis.fetch = original; }
+  });
+}

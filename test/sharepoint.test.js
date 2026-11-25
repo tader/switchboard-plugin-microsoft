@@ -30,13 +30,14 @@ test('reference exposes page content, library and list operations', async () => 
 });
 test('file download follows trusted redirects without forwarding the Graph token', async () => {
   const calls = [];
-  const adapter = await createSharePointDownload({}, { authMethods: [{ id:'test', token: async () => ({ accessToken:'secret' }) }] }, { fetcher: async (url, opts) => {
+  const options = { force: true, signal: new AbortController().signal };
+  const adapter = await createSharePointDownload({}, { authMethods: [{ id:'test', token: async (_conn, opts) => { assert.equal(opts, options); return { accessToken:'secret' }; } }] }, { fetcher: async (url, opts) => {
     calls.push([String(url), opts]);
     return calls.length === 1 ? new Response(null, { status:302, headers: { location:'https://tenant.sharepoint.com/file?token=secret' } }) : new Response('file bytes');
   } });
   try {
     const req = { url: new URL('http://sharepoint-download.localhost/files/drive/item/content'), method:'GET', headers:new Headers() };
-    await adapter.service.authMethods[0].authorize(req, { config:{} }, {});
+    await adapter.service.authMethods[0].authorize(req, { config:{} }, options);
     const result = await fetch(req.url, { headers:req.headers });
     assert.equal(await result.text(), 'file bytes');
     assert.equal(calls[0][1].headers.authorization, 'Bearer secret');

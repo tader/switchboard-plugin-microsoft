@@ -12,6 +12,7 @@
     "check:teams": "node scripts/check-teams.js",
     "build:content": "node scripts/build-content.js",
     "check:content": "node scripts/check-content.js",
+    "integration:authentication": "node scripts/authentication-integration.ts",
     "integration:email": "node scripts/email-integration.ts && node scripts/email-integration.ts --outlook",
     "integration:messaging": "node plugins/teams/scripts/contract-integration.js"
   },
