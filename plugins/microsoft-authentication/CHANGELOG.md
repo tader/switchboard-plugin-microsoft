@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.3.1](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-authentication-v1.3.0...microsoft-authentication-v1.3.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* open shared-profile sign-in browser immediately ([7f6c99f](https://github.com/tader/switchboard-plugin-microsoft/commit/7f6c99f98a1f86119208701b45d11b02f924b60b))
+* open shared-profile sign-in browser immediately ([847cc85](https://github.com/tader/switchboard-plugin-microsoft/commit/847cc857ba60033bdd75a49cda5c4be20d00ef31))
+* recover Microsoft consumers from renewed authentication sources ([866a1ce](https://github.com/tader/switchboard-plugin-microsoft/commit/866a1ce84ed54fdbc36b21bea18fe843b98080fe))
+* recover Microsoft consumers from renewed authentication sources ([c74a500](https://github.com/tader/switchboard-plugin-microsoft/commit/c74a50051d9e4237d8f4a312faffccb05025d808))
+
 ## [1.3.0](https://github.com/tader/switchboard-plugin-microsoft/compare/microsoft-authentication-v1.2.0...microsoft-authentication-v1.3.0) (2026-11-11)
 
 
