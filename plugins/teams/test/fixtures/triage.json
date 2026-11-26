@@ -1,5 +1,5 @@
 {
-  "description": "Synthetic, redacted contract examples; not a live capture. References: docs/triage-protocol.md.",
+  "description": "Synthetic, redacted contract examples; not a live capture. References: ../../development/teams/triage-protocol.md.",
   "boundary": 1791374400000,
   "chats": [
     {"id":"19:mention@thread.v2","title":"Mention chat","isRead":false,"isOneOnOne":false,"consumptionHorizon":{"originalArrivalTime":1791374400000}},

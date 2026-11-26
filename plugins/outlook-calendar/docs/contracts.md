@@ -1,15 +1,11 @@
 ---
-title: Shared Calendar contract (staged)
+title: Shared Calendar contract
 services: [outlook-calendar]
 ---
 
 # Shared Calendar contract
 
-Adds the optional Calendar v1 contract beside the existing Outlook Calendar API.
-It depends on the staged core API in [Switchboard #40](https://github.com/tader/switchboard/pull/40),
-which is disabled by default. The canonical JSON schema and wrapper are vendored
-from the core; Google Calendar implements the same schema. No existing connection,
-authentication method, configured permissions or consent is changed.
+Enable shared contracts on Switchboard to use Calendar v1 with an existing calendar connection.
 
 The adapter handles both Microsoft Graph and the Outlook web compatibility backend
 selected by Microsoft Authentication. Backend audience, URLs, property casing,
@@ -36,9 +32,7 @@ provider notifications; this adapter does not claim to suppress them.
 Reconciliation currently performs one calendar-list read and emits a broad
 connection-wide calendar invalidation. It is not native Microsoft push or a delta
 feed. Core activity leases, authentication pause, cooldown and SSE replay control
-this fallback. Native subscriptions and full cross-provider conformance remain
-follow-up work. Write and mapping tests use fixtures; live backend verification is
-required before enabling the staged API in production.
+this fallback.
 
 References: [Graph calendar view](https://learn.microsoft.com/graph/api/calendar-list-calendarview?view=graph-rest-1.0),
 [event update](https://learn.microsoft.com/graph/api/event-update?view=graph-rest-1.0),
