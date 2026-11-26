@@ -48,11 +48,6 @@ The shared Microsoft Authentication source path is covered in
 `test/teams-source.test.js` against this repository's
 `plugins/microsoft-authentication`, not a separately pinned checkout.
 
-Tests use offline provider fixtures and real local HTTP/SSE paths. They cover
-read-only scope, schema parity, restricted content, replay and uncertain sends,
-expiry without repeated provider requests, credential recovery and resource 403
-isolation. They do not establish live tenant compatibility or send real messages.
-
 The common Messaging contract supports the current Microsoft Authentication source
 method as well as existing browser/token connections. Shared-source credentials
 retain their Microsoft session mode, profile and identity. Discovery and requests

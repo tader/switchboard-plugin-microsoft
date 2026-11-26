@@ -65,11 +65,6 @@ bodies. Reconciliation makes one bounded authenticated folder request and emits
 scope invalidation. It is not native Microsoft push. Core activity leases and
 terminal auth pause govern polling; resource 403 is not global auth failure.
 
-Run `npm run check`, `npm test` and, with a compatible core,
-`SWITCHBOARD_ROOT=/path/to/core npm run integration:email`. Integration exercises
-both audiences through real local HTTP/SSE and offline provider fixtures. It does
-not send real email, expand scopes or register cloud subscriptions.
-
 ## References
 
 - [Message patches preserve omitted properties](https://learn.microsoft.com/en-us/graph/api/message-update?view=graph-rest-1.0)

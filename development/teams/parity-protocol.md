@@ -19,7 +19,7 @@ People suggestions use POST `/search/api/v1/suggestions`, a People entity query,
 Mailbox/Directory provenances, the `peoplepicker.newChat` scenario and a fresh
 `Cvid`. Message search uses POST `/search/api/v2/query`, a Message entity request,
 Teams content source, Optimized property set, bounded `from`/`size`, a fresh
-`cvid` and the `powerbar` scenario. References are listed in [THIRD_PARTY](../THIRD_PARTY.md).
+`cvid` and the `powerbar` scenario. References are listed in [THIRD_PARTY](../../plugins/teams/THIRD_PARTY.md).
 Initial simplified requests returned HTTP 400 on this account; corrected
 requests passed live on 2026-10-08. Fixture acceptance alone did not establish
 the private protocol.

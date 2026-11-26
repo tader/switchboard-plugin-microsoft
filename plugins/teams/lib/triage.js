@@ -4,7 +4,7 @@ import { arrivalMillis, encodeConversation, consumptionBoundary as horizon, addQ
 import { richContent } from './content.js';
 import { messageId, messageText } from './input.js';
 
-// Source-verified quote/read contracts: docs/triage-protocol.md. Never enable
+// Source-verified quote/read contracts: ../../development/teams/triage-protocol.md. Never enable
 // candidate writes merely because a mocked server accepts their payload.
 export const triageProtocols = Object.freeze({ chatQuotes: true, channelThreads: true, channelReplies: true, readMarkers: false });
 export const readStateProtocols = Object.freeze({ chat: Object.freeze({ read: true, unread: true }), channel: Object.freeze({ read: false, unread: false }) });
