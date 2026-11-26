@@ -270,7 +270,20 @@ export interface AuthMethod {
     /** Called when the connection is deleted. */
     revoke?(conn: Connection): Promise<void>;
 }
+/**
+ * Reviewed, opt-in JSON projection for audited local data calls only.
+ * Exact origin/path/method/auth profile and HTTP 200; unknown fields are dropped.
+ */
+export interface OutputPreviewRule {
+  origin: string;
+  method: 'GET';
+  path: string;
+  authMethods: string[];
+  fields: Record<string, { maxBytes: number }>;
+}
+
 export interface ServiceDefinition {
+  outputPreviews?: OutputPreviewRule[];
     /** Optional provider-independent contract, alongside existing APIs. */
     contracts?: ContractDefinition;
     /** Omitted by existing plugins; defaults to HTTP. */

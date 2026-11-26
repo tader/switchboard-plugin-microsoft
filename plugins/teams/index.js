@@ -281,6 +281,10 @@ export async function createAdapter(ctx, {
   };
   return {
     services: [{ id: 'teams-web', name: 'Teams', icon: 'icon.svg', description: 'Teams APIs using shared Microsoft Authentication.',
+      outputPreviews: [{
+        origin, method: 'GET', path: '/capabilities',
+        authMethods: ['authentication-source'], fields: { transport: { maxBytes: 32 } },
+      }],
       contracts: createMessaging(ctx.dataDir),
       baseUrl: 'http://teams.localhost', allowedHosts: ['teams.localhost', new URL(origin).host], openapi,
       authMethods: [{

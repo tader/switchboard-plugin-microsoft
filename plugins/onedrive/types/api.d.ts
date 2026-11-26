@@ -208,7 +208,20 @@ export interface AuthMethod {
   revoke?(conn: Connection): Promise<void>;
 }
 
+/**
+ * Reviewed, opt-in JSON projection for audited local data calls only.
+ * Exact origin/path/method/auth profile and HTTP 200; unknown fields are dropped.
+ */
+export interface OutputPreviewRule {
+  origin: string;
+  method: 'GET';
+  path: string;
+  authMethods: string[];
+  fields: Record<string, { maxBytes: number }>;
+}
+
 export interface ServiceDefinition {
+  outputPreviews?: OutputPreviewRule[];
   /** Omitted by existing plugins; defaults to HTTP. */
   kind?: ConnectionKind;
   /** Globally unique, e.g. "gmail". */
