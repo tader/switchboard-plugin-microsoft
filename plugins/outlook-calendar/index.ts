@@ -35,6 +35,11 @@ export default function setup(ctx: PluginContext) {
           ],
           scopes: (c) => SCOPES[c.access] ?? SCOPES["full"],
         }),
+        outputPreviews: [{
+          origin: "https://graph.microsoft.com", method: "GET", path: "/v1.0/me/calendar",
+          authMethods: ["oauth", "device", "authentication-source"],
+          fields: { defaultOnlineMeetingProvider: { maxBytes: 32 } },
+        }],
         contracts,
       },
     ],

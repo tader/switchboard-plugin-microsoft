@@ -340,6 +340,10 @@ export async function createContentPlugin(
         baseUrl: placeholder,
         allowedHosts: [new URL(placeholder).host, new URL(origin).host],
         openapi: contentSpec(kind, placeholder),
+        ...(['word', 'powerpoint'].includes(kind) ? { outputPreviews: [{
+          origin, method: 'GET', path: '/capabilities',
+          authMethods: ['authentication-source'], fields: { kind: { maxBytes: 32 } },
+        }] } : {}),
         authMethods: [method],
       },
     ],

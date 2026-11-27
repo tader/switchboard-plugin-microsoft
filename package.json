@@ -14,7 +14,8 @@
     "check:content": "node scripts/check-content.js",
     "integration:authentication": "node scripts/authentication-integration.ts",
     "integration:email": "node scripts/email-integration.ts && node scripts/email-integration.ts --outlook",
-    "integration:messaging": "node plugins/teams/scripts/contract-integration.js"
+    "integration:messaging": "node plugins/teams/scripts/contract-integration.js",
+    "integration:output": "node scripts/output-preview-integration.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

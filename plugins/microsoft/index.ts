@@ -113,5 +113,9 @@ export default function setup(ctx: PluginContext) {
     ],
   });
 
+  graph.outputPreviews = [{
+    origin: 'https://graph.microsoft.com', method: 'GET', path: '/v1.0/me/drive',
+    authMethods: ['oauth', 'device', 'authentication-source'], fields: { driveType: { maxBytes: 32 } },
+  }];
   return { services: [graph], exports: { microsoftService, spec, createContentPlugin, createSharePointDownload } };
 }
