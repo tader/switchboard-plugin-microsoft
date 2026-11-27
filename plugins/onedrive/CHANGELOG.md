@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/tader/switchboard-plugin-microsoft/compare/onedrive-v1.2.0...onedrive-v1.3.0) (2026-11-27)
+
+
+### Features
+
+* add reviewed Microsoft activity response previews ([#52](https://github.com/tader/switchboard-plugin-microsoft/issues/52)) ([4f1dbe2](https://github.com/tader/switchboard-plugin-microsoft/commit/4f1dbe2871ff9fe6269952dc0503a77927e9bc9b))
+
 ## [1.2.0](https://github.com/tader/switchboard-plugin-microsoft/compare/onedrive-v1.1.0...onedrive-v1.2.0) (2026-10-16)
 
 
