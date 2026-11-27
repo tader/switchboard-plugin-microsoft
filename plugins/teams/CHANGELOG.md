@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.15.0...teams-v0.16.0) (2026-11-27)
+
+
+### Features
+
+* add reviewed Microsoft activity response previews ([#52](https://github.com/tader/switchboard-plugin-microsoft/issues/52)) ([4f1dbe2](https://github.com/tader/switchboard-plugin-microsoft/commit/4f1dbe2871ff9fe6269952dc0503a77927e9bc9b))
+
 ## [0.15.0](https://github.com/tader/switchboard-plugin-microsoft/compare/teams-v0.14.1...teams-v0.15.0) (2026-11-10)
 
 
